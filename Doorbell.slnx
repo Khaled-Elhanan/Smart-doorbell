@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Doorbell.Api/Doorbell.Api.csproj" />
+    <Project Path="src/Doorbell.Application/Doorbell.Application.csproj" />
+    <Project Path="src/Doorbell.Domain/Doorbell.Domain.csproj" />
+    <Project Path="src/Doorbell.Infrastructure/Doorbell.Infrastructure.csproj" />
+  </Folder>
+</Solution>
