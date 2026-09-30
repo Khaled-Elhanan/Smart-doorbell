@@ -32,3 +32,4 @@ namespace Doorbell.Domain.Entities
             DeviceType = deviceType;
         }
     }
+}
