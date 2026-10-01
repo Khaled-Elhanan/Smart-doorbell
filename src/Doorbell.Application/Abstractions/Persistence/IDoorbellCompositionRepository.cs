@@ -10,5 +10,9 @@ namespace Doorbell.Application.Abstractions.Persistence
         Task<AdvancedDoorbellComposition?> GetByDeviceIdAsync(
             Guid deviceId,
             CancellationToken cancellationToken);
+
+        Task AddAsync(
+            AdvancedDoorbellComposition composition,
+            CancellationToken cancellationToken);
     }
 }

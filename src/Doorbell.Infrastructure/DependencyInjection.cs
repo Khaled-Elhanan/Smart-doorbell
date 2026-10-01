@@ -12,18 +12,19 @@ namespace Doorbell.Infrastructure
         public static IServiceCollection AddInfrastructure(
             this IServiceCollection services)
         {
-            services.AddScoped<
-                IDoorbellRingEventRepository,
-                DoorbellRingEventRepository>();
+            services.AddScoped<IUserRepository, UserRepository>();
+
+            services.AddScoped<IDeviceRepository, DeviceRepository>();
 
             services.AddScoped<
                 IDoorbellCompositionRepository,
                 DoorbellCompositionRepository>();
 
             services.AddScoped<
-                IUnitOfWork,
-                UnitOfWork>();
+                IDoorbellRingEventRepository,
+                DoorbellRingEventRepository>();
 
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
             return services;
         }
     }

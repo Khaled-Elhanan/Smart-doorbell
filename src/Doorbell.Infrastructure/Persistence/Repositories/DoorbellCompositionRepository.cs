@@ -19,6 +19,15 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
             _context = context;
         }
 
+        public async Task AddAsync(
+     AdvancedDoorbellComposition composition,
+     CancellationToken cancellationToken)
+        {
+            await _context.AdvancedDoorbellCompositions.AddAsync(
+                composition,
+                cancellationToken);
+        }
+
         public async Task<AdvancedDoorbellComposition?> GetByDeviceIdAsync(
             Guid deviceId,
             CancellationToken cancellationToken)
