@@ -2,9 +2,6 @@
 using Doorbell.Domain.Entities;
 using Doorbell.Infrastructure.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Doorbell.Infrastructure.Persistence.Repositories
 {
