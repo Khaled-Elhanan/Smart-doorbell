@@ -29,6 +29,8 @@ public sealed class DeviceCommand
 
     public string? ErrorMessage { get; private set; }
 
+    public string? StorageKey { get; private set; }
+
     private DeviceCommand()
     {
     }
@@ -110,5 +112,27 @@ public sealed class DeviceCommand
         Status = DeviceCommandStatus.Failed;
         ErrorMessage = errorMessage;
         CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void SetStorageKey(string storageKey)
+    {
+        if (string.IsNullOrWhiteSpace(storageKey))
+            throw new DomainException("Storage key is required.");
+
+        if (Status != DeviceCommandStatus.Pending)
+            throw new DomainException(
+                "Storage key can only be set for pending commands.");
+
+        StorageKey = storageKey;
+    }
+
+    public void Retry()
+    {
+        if (Status != DeviceCommandStatus.Failed)
+            throw new DomainException(
+                "Only failed commands can be retried.");
+
+        Status = DeviceCommandStatus.Pending;
+        ErrorMessage = null;
     }
 }

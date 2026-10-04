@@ -1,8 +1,9 @@
 ﻿using Doorbell.Application.Abstractions.Persistence;
+using Doorbell.Application.Abstractions.Storage;
 using Doorbell.Infrastructure.Messaging.Mqtt;
 using Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
-using Doorbell.Infrastructure.Persistence;
 using Doorbell.Infrastructure.Persistence.Repositories;
+using Doorbell.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 namespace Doorbell.Infrastructure
@@ -29,6 +30,7 @@ namespace Doorbell.Infrastructure
 
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddHostedService<RingMqttConsumer>();
+            services.AddSingleton<IStorageKeyGenerator, StorageKeyGenerator>();
             return services;
         }
     }
