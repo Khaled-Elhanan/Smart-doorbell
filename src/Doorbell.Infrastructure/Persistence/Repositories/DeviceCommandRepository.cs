@@ -1,0 +1,48 @@
+﻿using Doorbell.Application.Abstractions.Repositories;
+using Doorbell.Domain.Entities;
+using Doorbell.Domain.Enums;
+using Doorbell.Infrastructure.Persistence.Context;
+using Microsoft.EntityFrameworkCore;
+
+namespace Doorbell.Infrastructure.Persistence.Repositories;
+
+public sealed class DeviceCommandRepository : IDeviceCommandRepository
+{
+    private readonly ApplicationDbContext _context;
+
+    public DeviceCommandRepository(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task<DeviceCommand?> GetByRequestIdAsync(
+        string requestId,
+        CancellationToken cancellationToken)
+    {
+        return _context.DeviceCommands
+            .SingleOrDefaultAsync(
+                x => x.RequestId == requestId,
+                cancellationToken);
+    }
+
+    public Task<DeviceCommand?> GetByRingEventIdAsync(
+        Guid ringEventId,
+        DeviceCommandType commandType,
+        CancellationToken cancellationToken)
+    {
+        return _context.DeviceCommands
+            .SingleOrDefaultAsync(
+                x => x.RingEventId == ringEventId
+                     && x.CommandType == commandType,
+                cancellationToken);
+    }
+
+    public async Task AddAsync(
+        DeviceCommand deviceCommand,
+        CancellationToken cancellationToken)
+    {
+        await _context.DeviceCommands.AddAsync(
+            deviceCommand,
+            cancellationToken);
+    }
+}

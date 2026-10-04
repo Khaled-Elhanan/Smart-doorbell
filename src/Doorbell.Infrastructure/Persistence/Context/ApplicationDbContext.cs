@@ -23,6 +23,7 @@ namespace Doorbell.Infrastructure.Persistence.Context
 
         public DbSet<DoorbellRingEvent> DoorbellRingEvents =>
             Set<DoorbellRingEvent>();
+        public DbSet<DeviceCommand> DeviceCommands { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
