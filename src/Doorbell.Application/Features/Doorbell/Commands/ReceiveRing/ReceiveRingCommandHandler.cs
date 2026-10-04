@@ -5,7 +5,7 @@ using MediatR;
 namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
 {
     public sealed class ReceiveRingCommandHandler
-    : IRequestHandler<ReceiveRingCommand, Guid>
+        : IRequestHandler<ReceiveRingCommand, ReceiveRingResult>
     {
         private readonly IDoorbellRingEventRepository _ringEventRepository;
         private readonly IDoorbellCompositionRepository _compositionRepository;
@@ -21,7 +21,7 @@ namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<Guid> Handle(
+        public async Task<ReceiveRingResult> Handle(
             ReceiveRingCommand request,
             CancellationToken cancellationToken)
         {
@@ -32,7 +32,11 @@ namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
                     cancellationToken);
 
             if (existingEvent is not null)
-                return existingEvent.Id;
+            {
+                return new ReceiveRingResult(
+                    existingEvent.Id,
+                    false);
+            }
 
             var composition =
                 await _compositionRepository.GetByDeviceIdAsync(
@@ -58,8 +62,9 @@ namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
             await _unitOfWork.SaveChangesAsync(
                 cancellationToken);
 
-            return ringEvent.Id;
+            return new ReceiveRingResult(
+                ringEvent.Id,
+                true);
         }
     }
-
 }

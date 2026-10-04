@@ -8,6 +8,5 @@ namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
     public sealed record ReceiveRingCommand(
     Guid DeviceId,
     string DeviceEventId,
-    DateTime RingTimestampUtc)
-    : IRequest<Guid>;
+    DateTime RingTimestampUtc) : IRequest<ReceiveRingResult>;
 }

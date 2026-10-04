@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Doorbell.Application.Features.Doorbell.Commands.ReceiveRing
 {
-    internal class ReceiveRingResult
-    {
-    }
+    public sealed record ReceiveRingResult(
+    Guid RingEventId,
+    bool IsNew);
 }
