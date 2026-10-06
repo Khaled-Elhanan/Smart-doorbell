@@ -39,12 +39,16 @@ public sealed class DeviceCommandConfiguration
         builder.Property(x => x.StorageKey)
             .HasMaxLength(500);
 
+        builder.Property(x => x.RowVersion)
+            .IsRowVersion();
+
         builder.HasIndex(x => x.RequestId)
             .IsUnique();
 
-        builder.HasIndex(x => x.StorageKey);
+        builder.HasIndex(x => new { x.RingEventId, x.CommandType })
+            .IsUnique();
 
-        builder.HasIndex(x => x.RingEventId);
+        builder.HasIndex(x => x.StorageKey);
 
         builder.HasOne<DoorbellRingEvent>()
             .WithMany()

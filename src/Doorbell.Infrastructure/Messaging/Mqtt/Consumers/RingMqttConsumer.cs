@@ -147,7 +147,7 @@ public sealed class RingMqttConsumer : BackgroundService
             var sender =
                 scope.ServiceProvider.GetRequiredService<ISender>();
 
-            await sender.Send(
+            var result = await sender.Send(
                 command,
                 CancellationToken.None);
 
@@ -155,8 +155,10 @@ public sealed class RingMqttConsumer : BackgroundService
                 CancellationToken.None);
 
             _logger.LogInformation(
-                "Successfully processed and acknowledged ring event {EventId}",
-                message.EventId);
+                "Successfully processed and acknowledged ring event {EventId}. RingEventId: {RingEventId}. IsNew: {IsNew}",
+                message.EventId,
+                result.RingEventId,
+                result.IsNew);
         }
         catch (JsonException ex)
         {

@@ -1,19 +1,19 @@
 ﻿using Doorbell.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Doorbell.Application.Abstractions.Persistence
+namespace Doorbell.Application.Abstractions.Repositories;
+
+public interface IDoorbellRingEventRepository
 {
-    public interface IDoorbellRingEventRepository
-    {
-        Task<DoorbellRingEvent?> GetByDeviceEventIdAsync(
-            Guid deviceId,
-            string deviceEventId,
-            CancellationToken cancellationToken);
+    Task<DoorbellRingEvent?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
 
-        Task AddAsync(
-            DoorbellRingEvent ringEvent,
-            CancellationToken cancellationToken);
-    }
+    Task<DoorbellRingEvent?> GetByDeviceEventIdAsync(
+        Guid deviceId,
+        string deviceEventId,
+        CancellationToken cancellationToken);
+
+    Task AddAsync(
+        DoorbellRingEvent ringEvent,
+        CancellationToken cancellationToken);
 }

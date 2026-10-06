@@ -121,6 +121,12 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RingEventId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<DateTime?>("SentAtUtc")
                         .HasColumnType("datetime2");
 
@@ -138,9 +144,10 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.HasIndex("RequestId")
                         .IsUnique();
 
-                    b.HasIndex("RingEventId");
-
                     b.HasIndex("StorageKey");
+
+                    b.HasIndex("RingEventId", "CommandType")
+                        .IsUnique();
 
                     b.ToTable("DeviceCommands", (string)null);
                 });
@@ -178,6 +185,12 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("RingTimestampUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("SnapshotCapturedAtUtc")
                         .HasColumnType("datetime2");

@@ -1,4 +1,5 @@
 ﻿using Doorbell.Application.Abstractions.Persistence;
+using Doorbell.Application.Abstractions.Repositories;
 using Doorbell.Domain.Entities;
 using MediatR;
 

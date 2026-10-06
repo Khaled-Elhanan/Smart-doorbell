@@ -31,6 +31,8 @@ public sealed class DeviceCommand
 
     public string? StorageKey { get; private set; }
 
+    public byte[] RowVersion { get; private set; } = null!;
+
     private DeviceCommand()
     {
     }
@@ -40,7 +42,8 @@ public sealed class DeviceCommand
         Guid deviceId,
         string entityCode,
         string requestId,
-        DeviceCommandType commandType)
+        DeviceCommandType commandType,
+        string? storageKey)
     {
         if (ringEventId == Guid.Empty)
             throw new DomainException("RingEventId cannot be empty.");
@@ -54,6 +57,9 @@ public sealed class DeviceCommand
         if (string.IsNullOrWhiteSpace(requestId))
             throw new DomainException("RequestId is required.");
 
+        if (storageKey is not null && string.IsNullOrWhiteSpace(storageKey))
+            throw new DomainException("Storage key cannot be whitespace.");
+
         Id = Guid.NewGuid();
 
         RingEventId = ringEventId;
@@ -61,6 +67,7 @@ public sealed class DeviceCommand
         EntityCode = entityCode;
         RequestId = requestId;
         CommandType = commandType;
+        StorageKey = storageKey;
 
         Status = DeviceCommandStatus.Pending;
         Attempt = 0;
@@ -72,14 +79,16 @@ public sealed class DeviceCommand
         Guid deviceId,
         string entityCode,
         string requestId,
-        DeviceCommandType commandType)
+        DeviceCommandType commandType,
+        string? storageKey = null)
     {
         return new DeviceCommand(
             ringEventId,
             deviceId,
             entityCode,
             requestId,
-            commandType);
+            commandType,
+            storageKey);
     }
 
     public void MarkSent()
@@ -114,18 +123,6 @@ public sealed class DeviceCommand
         CompletedAtUtc = DateTime.UtcNow;
     }
 
-    public void SetStorageKey(string storageKey)
-    {
-        if (string.IsNullOrWhiteSpace(storageKey))
-            throw new DomainException("Storage key is required.");
-
-        if (Status != DeviceCommandStatus.Pending)
-            throw new DomainException(
-                "Storage key can only be set for pending commands.");
-
-        StorageKey = storageKey;
-    }
-
     public void Retry()
     {
         if (Status != DeviceCommandStatus.Failed)
@@ -134,5 +131,6 @@ public sealed class DeviceCommand
 
         Status = DeviceCommandStatus.Pending;
         ErrorMessage = null;
+        CompletedAtUtc = null;
     }
 }

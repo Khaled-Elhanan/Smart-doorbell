@@ -37,6 +37,8 @@ namespace Doorbell.Domain.Entities
 
         public DateTime? AcknowledgedAtUtc { get; private set; }
 
+        public byte[] RowVersion { get; private set; } = null!;
+
         private DoorbellRingEvent()
         {
             // EF Core
@@ -100,9 +102,13 @@ namespace Doorbell.Domain.Entities
             string resolution,
             DateTime capturedAtUtc)
         {
-            if (SnapshotStatus != SnapshotStatus.Requested)
+            if (SnapshotStatus == SnapshotStatus.Captured)
                 throw new DomainException(
-                    "Snapshot can only be captured when it is Requested.");
+                    "Snapshot has already been captured.");
+
+            if (SnapshotStatus == SnapshotStatus.NotRequested)
+                throw new DomainException(
+                    "Snapshot was never requested for this ring event.");
 
             if (string.IsNullOrWhiteSpace(storageKey))
                 throw new DomainException("Snapshot storage key is required.");
@@ -146,9 +152,13 @@ namespace Doorbell.Domain.Entities
 
         public void MarkChimePlayed()
         {
-            if (ChimeStatus != ChimeStatus.Requested)
+            if (ChimeStatus == ChimeStatus.Played)
                 throw new DomainException(
-                    "Chime can only be marked Played when it is Requested.");
+                    "Chime has already been played.");
+
+            if (ChimeStatus == ChimeStatus.NotRequested)
+                throw new DomainException(
+                    "Chime was never requested for this ring event.");
 
             ChimeStatus = ChimeStatus.Played;
         }

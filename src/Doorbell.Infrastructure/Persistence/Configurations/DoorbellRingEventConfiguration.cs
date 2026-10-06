@@ -1,4 +1,4 @@
-﻿using Doorbell.Domain.Entities;
+using Doorbell.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using System;
@@ -46,8 +46,11 @@ namespace Doorbell.Infrastructure.Persistence.Configurations
             builder.Property(x => x.AcknowledgeStatus)
                 .IsRequired();
 
-            builder.HasOne<Device>()
-                .WithMany()
+            builder.Property(x => x.RowVersion)
+            .IsRowVersion();
+
+        builder.HasOne<Device>()
+            .WithMany()
                 .HasForeignKey(x => x.DeviceId)
                 .OnDelete(DeleteBehavior.Cascade);
 

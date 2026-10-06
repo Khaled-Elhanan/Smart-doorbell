@@ -1,40 +1,49 @@
-﻿using Doorbell.Application.Abstractions.Persistence;
+﻿using Doorbell.Application.Abstractions.Repositories;
 using Doorbell.Domain.Entities;
 using Doorbell.Infrastructure.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
 
-namespace Doorbell.Infrastructure.Persistence.Repositories
-{
-    public sealed class DoorbellRingEventRepository
+namespace Doorbell.Infrastructure.Persistence.Repositories;
+
+public sealed class DoorbellRingEventRepository
     : IDoorbellRingEventRepository
+{
+    private readonly ApplicationDbContext _context;
+
+    public DoorbellRingEventRepository(
+        ApplicationDbContext context)
     {
-        private readonly ApplicationDbContext _context;
+        _context = context;
+    }
 
-        public DoorbellRingEventRepository(
-            ApplicationDbContext context)
-        {
-            _context = context;
-        }
-
-        public async Task<DoorbellRingEvent?> GetByDeviceEventIdAsync(
-            Guid deviceId,
-            string deviceEventId,
-            CancellationToken cancellationToken)
-        {
-            return await _context.DoorbellRingEvents
-                .FirstOrDefaultAsync(
-                    x => x.DeviceId == deviceId &&
-                         x.DeviceEventId == deviceEventId,
-                    cancellationToken);
-        }
-
-        public async Task AddAsync(
-            DoorbellRingEvent ringEvent,
-            CancellationToken cancellationToken)
-        {
-            await _context.DoorbellRingEvents.AddAsync(
-                ringEvent,
+    public async Task<DoorbellRingEvent?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await _context.DoorbellRingEvents
+            .FirstOrDefaultAsync(
+                x => x.Id == id,
                 cancellationToken);
-        }
+    }
+
+    public async Task<DoorbellRingEvent?> GetByDeviceEventIdAsync(
+        Guid deviceId,
+        string deviceEventId,
+        CancellationToken cancellationToken)
+    {
+        return await _context.DoorbellRingEvents
+            .FirstOrDefaultAsync(
+                x => x.DeviceId == deviceId &&
+                     x.DeviceEventId == deviceEventId,
+                cancellationToken);
+    }
+
+    public async Task AddAsync(
+        DoorbellRingEvent ringEvent,
+        CancellationToken cancellationToken)
+    {
+        await _context.DoorbellRingEvents.AddAsync(
+            ringEvent,
+            cancellationToken);
     }
 }
