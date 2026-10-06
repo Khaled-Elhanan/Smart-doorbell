@@ -14,19 +14,18 @@ namespace Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
 public sealed class RingMqttConsumer : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly MqttConnectionManager _connectionManager;
     private readonly MqttOptions _options;
     private readonly ILogger<RingMqttConsumer> _logger;
 
-    private readonly MqttClientFactory _factory = new();
-
-    private IMqttClient? _client;
-
     public RingMqttConsumer(
         IServiceScopeFactory scopeFactory,
+        MqttConnectionManager connectionManager,
         IOptions<MqttOptions> options,
         ILogger<RingMqttConsumer> logger)
     {
         _scopeFactory = scopeFactory;
+        _connectionManager = connectionManager;
         _options = options.Value;
         _logger = logger;
     }
@@ -34,19 +33,16 @@ public sealed class RingMqttConsumer : BackgroundService
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
     {
-        _client = _factory.CreateMqttClient();
-
-        _client.ApplicationMessageReceivedAsync +=
+        _connectionManager.Client.ApplicationMessageReceivedAsync +=
             HandleMessageAsync;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                if (!_client.IsConnected)
-                {
-                    await ConnectAsync(stoppingToken);
-                }
+                await _connectionManager.SubscribeAsync(
+                    _options.RingTopic,
+                    stoppingToken);
 
                 await Task.Delay(
                     TimeSpan.FromSeconds(5),
@@ -68,42 +64,6 @@ public sealed class RingMqttConsumer : BackgroundService
                     stoppingToken);
             }
         }
-    }
-
-    private async Task ConnectAsync(
-        CancellationToken cancellationToken)
-    {
-        var options = new MqttClientOptionsBuilder()
-            .WithClientId(_options.ClientId)
-            .WithTcpServer(
-                _options.Host,
-                _options.Port)
-            .WithCleanStart(false)
-            .WithSessionExpiryInterval(
-                (uint)_options.SessionExpirySeconds)
-            .WithKeepAlivePeriod(
-                TimeSpan.FromSeconds(30))
-            .Build();
-
-        await _client!.ConnectAsync(
-            options,
-            cancellationToken);
-
-        var subscribeOptions =
-            _factory.CreateSubscribeOptionsBuilder()
-                .WithTopicFilter(
-                    filter => filter
-                        .WithTopic(_options.RingTopic)
-                        .WithAtLeastOnceQoS())
-                .Build();
-
-        await _client.SubscribeAsync(
-            subscribeOptions,
-            cancellationToken);
-
-        _logger.LogInformation(
-            "Connected to MQTT broker and subscribed to {Topic}",
-            _options.RingTopic);
     }
 
     private async Task HandleMessageAsync(

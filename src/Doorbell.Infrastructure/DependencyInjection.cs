@@ -46,9 +46,7 @@ namespace Doorbell.Infrastructure
 
             services.AddSingleton<MqttClientFactory>();
 
-            services.AddSingleton<IMqttClient>(sp =>
-                sp.GetRequiredService<MqttClientFactory>()
-                    .CreateMqttClient());
+            services.AddSingleton<MqttConnectionManager>();
 
             services.AddSingleton<
                 IMqttCommandPublisher,

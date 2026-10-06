@@ -13,14 +13,14 @@ public sealed class MqttCommandPublisher : IMqttCommandPublisher
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private readonly IMqttClient _client;
+    private readonly MqttConnectionManager _connectionManager;
     private readonly ILogger<MqttCommandPublisher> _logger;
 
     public MqttCommandPublisher(
-        IMqttClient client,
+        MqttConnectionManager connectionManager,
         ILogger<MqttCommandPublisher> logger)
     {
-        _client = client;
+        _connectionManager = connectionManager;
         _logger = logger;
     }
 
@@ -36,11 +36,8 @@ public sealed class MqttCommandPublisher : IMqttCommandPublisher
                 nameof(topic));
         }
 
-        if (!_client.IsConnected)
-        {
-            throw new InvalidOperationException(
-                "MQTT client is not connected.");
-        }
+        await _connectionManager.EnsureConnectedAsync(
+            cancellationToken);
 
         var json = JsonSerializer.Serialize(
             payload,
@@ -53,9 +50,15 @@ public sealed class MqttCommandPublisher : IMqttCommandPublisher
                 MqttQualityOfServiceLevel.AtLeastOnce)
             .Build();
 
-        await _client.PublishAsync(
+        var result = await _connectionManager.Client.PublishAsync(
             message,
             cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"MQTT publish to {topic} was rejected: {result.ReasonCode}.");
+        }
 
         _logger.LogInformation(
             "Published MQTT command to {Topic}",
