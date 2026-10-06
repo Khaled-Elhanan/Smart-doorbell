@@ -1,6 +1,7 @@
 ﻿using Doorbell.Application.Abstractions.Messaging;
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Abstractions.Repositories;
+using Doorbell.Application.Abstractions.Storage;
 using Doorbell.Domain.Entities;
 using Doorbell.Domain.Enums;
 using MediatR;
@@ -15,6 +16,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
     private readonly IDoorbellCompositionRepository _compositionRepository;
     private readonly IDeviceCommandRepository _deviceCommandRepository;
     private readonly IMqttCommandPublisher _mqttCommandPublisher;
+    private readonly IStorageKeyGenerator _storageKeyGenerator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<OrchestrateDeviceCommandsCommandHandler> _logger;
 
@@ -23,6 +25,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         IDoorbellCompositionRepository compositionRepository,
         IDeviceCommandRepository deviceCommandRepository,
         IMqttCommandPublisher mqttCommandPublisher,
+        IStorageKeyGenerator storageKeyGenerator,
         IUnitOfWork unitOfWork,
         ILogger<OrchestrateDeviceCommandsCommandHandler> logger)
     {
@@ -30,6 +33,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         _compositionRepository = compositionRepository;
         _deviceCommandRepository = deviceCommandRepository;
         _mqttCommandPublisher = mqttCommandPublisher;
+        _storageKeyGenerator = storageKeyGenerator;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -56,8 +60,12 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
 
         if (composition is null)
         {
-            throw new InvalidOperationException(
-                $"No doorbell composition found for device '{ringEvent.DeviceId}'.");
+            _logger.LogWarning(
+                "Ring event {RingEventId} has no doorbell composition for device {DeviceId}; orchestration skipped.",
+                ringEvent.Id,
+                ringEvent.DeviceId);
+
+            return;
         }
 
         var snapshotRequestId =
@@ -67,79 +75,129 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
             $"{ringEvent.DeviceEventId}:chime";
 
         var snapshotCommand =
-            DeviceCommand.Create(
+            await _deviceCommandRepository.GetByRingEventIdAsync(
+                ringEvent.Id,
+                DeviceCommandType.Snapshot,
+                cancellationToken);
+
+        var chimeCommand =
+            await _deviceCommandRepository.GetByRingEventIdAsync(
+                ringEvent.Id,
+                DeviceCommandType.Chime,
+                cancellationToken);
+
+        var intentChanged = false;
+
+        if (snapshotCommand is null)
+        {
+            snapshotCommand = DeviceCommand.Create(
                 ringEvent.Id,
                 ringEvent.DeviceId,
                 composition.CameraEntityCode,
                 snapshotRequestId,
-                DeviceCommandType.Snapshot);
+                DeviceCommandType.Snapshot,
+                _storageKeyGenerator.CreateSnapshotKey(
+                    ringEvent.DeviceId,
+                    ringEvent.Id));
 
-        var chimeCommand =
-            DeviceCommand.Create(
+            await _deviceCommandRepository.AddAsync(
+                snapshotCommand,
+                cancellationToken);
+
+            intentChanged = true;
+        }
+
+        if (chimeCommand is null)
+        {
+            chimeCommand = DeviceCommand.Create(
                 ringEvent.Id,
                 ringEvent.DeviceId,
                 composition.ChimeEntityCode,
                 chimeRequestId,
                 DeviceCommandType.Chime);
 
-        await _deviceCommandRepository.AddAsync(
-            snapshotCommand,
-            cancellationToken); 
+            await _deviceCommandRepository.AddAsync(
+                chimeCommand,
+                cancellationToken);
 
-        await _deviceCommandRepository.AddAsync(
-            chimeCommand,
-            cancellationToken);
+            intentChanged = true;
+        }
 
-        await _unitOfWork.SaveChangesAsync(
-            cancellationToken);
+        if (ringEvent.SnapshotStatus == SnapshotStatus.NotRequested)
+        {
+            ringEvent.MarkSnapshotRequested();
+            intentChanged = true;
+        }
 
-        _logger.LogInformation(
-            "Created device commands for RingEvent {RingEventId}. SnapshotRequestId: {SnapshotRequestId}, ChimeRequestId: {ChimeRequestId}",
-            ringEvent.Id,
-            snapshotRequestId,
-            chimeRequestId);
+        if (ringEvent.ChimeStatus == ChimeStatus.NotRequested)
+        {
+            ringEvent.MarkChimeRequested();
+            intentChanged = true;
+        }
 
-        var snapshotPayload =
-            new SnapshotCommandPayload(
+        if (intentChanged)
+        {
+            await _unitOfWork.SaveChangesAsync(
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Recorded orchestration intent for ring event {RingEventId}. SnapshotRequestId: {SnapshotRequestId}, ChimeRequestId: {ChimeRequestId}",
+                ringEvent.Id,
                 snapshotRequestId,
-                ringEvent.DeviceId);
+                chimeRequestId);
+        }
 
-        await _mqttCommandPublisher.PublishAsync(
-            composition.SnapshotCommandTopic,
-            snapshotPayload,
-            cancellationToken);
+        var published = false;
 
-        snapshotCommand.MarkSent();
-        ringEvent.MarkSnapshotRequested();
+        if (snapshotCommand.Status == DeviceCommandStatus.Pending)
+        {
+            await _mqttCommandPublisher.PublishAsync(
+                composition.SnapshotCommandTopic,
+                new SnapshotCommandPayload(
+                    snapshotRequestId,
+                    ringEvent.DeviceId),
+                cancellationToken);
 
-        await _unitOfWork.SaveChangesAsync(
-            cancellationToken);
+            snapshotCommand.MarkSent();
+            published = true;
 
-        _logger.LogInformation(
-            "Snapshot command sent for RingEvent {RingEventId}. RequestId: {RequestId}",
-            ringEvent.Id,
-            snapshotRequestId);
+            await _unitOfWork.SaveChangesAsync(
+                cancellationToken);
 
-        var chimePayload =
-            new ChimeCommandPayload(
+            _logger.LogInformation(
+                "Published snapshot command for ring event {RingEventId}. RequestId: {RequestId}, StorageKey: {StorageKey}",
+                ringEvent.Id,
+                snapshotRequestId,
+                snapshotCommand.StorageKey);
+        }
+
+        if (chimeCommand.Status == DeviceCommandStatus.Pending)
+        {
+            await _mqttCommandPublisher.PublishAsync(
+                composition.ChimeCommandTopic,
+                new ChimeCommandPayload(
+                    chimeRequestId,
+                    composition.DefaultChimeMelodyId),
+                cancellationToken);
+
+            chimeCommand.MarkSent();
+            published = true;
+
+            await _unitOfWork.SaveChangesAsync(
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Published chime command for ring event {RingEventId}. RequestId: {RequestId}, MelodyId: {MelodyId}",
+                ringEvent.Id,
                 chimeRequestId,
                 composition.DefaultChimeMelodyId);
+        }
 
-        await _mqttCommandPublisher.PublishAsync(
-            composition.ChimeCommandTopic,
-            chimePayload,
-            cancellationToken);
-
-        chimeCommand.MarkSent();
-        ringEvent.MarkChimeRequested();
-
-        await _unitOfWork.SaveChangesAsync(
-            cancellationToken);
-
-        _logger.LogInformation(
-            "Chime command sent for RingEvent {RingEventId}. RequestId: {RequestId}, MelodyId: {MelodyId}",
-            ringEvent.Id,
-            chimeRequestId,
-            composition.DefaultChimeMelodyId);
+        if (!intentChanged && !published)
+        {
+            _logger.LogInformation(
+                "Orchestration already complete for ring event {RingEventId}; no-op.",
+                ringEvent.Id);
+        }
     }
 }
