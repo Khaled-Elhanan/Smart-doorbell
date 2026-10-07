@@ -1,8 +1,10 @@
 ﻿using System.Buffers;
 using System.Text.Json;
+using Doorbell.Application.Features.Doorbell.Commands.OrchestrateDeviceCommands;
 using Doorbell.Application.Features.Doorbell.Commands.ReceiveRing;
 using Doorbell.Infrastructure.Messaging.Mqtt.Models;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -111,6 +113,13 @@ public sealed class RingMqttConsumer : BackgroundService
                 command,
                 CancellationToken.None);
 
+            if (result.IsNew)
+            {
+                await OrchestrateDeviceCommandsAsync(
+                    sender,
+                    result.RingEventId);
+            }
+
             await args.AcknowledgeAsync(
                 CancellationToken.None);
 
@@ -136,6 +145,26 @@ public sealed class RingMqttConsumer : BackgroundService
                 "Failed to process ring MQTT message.");
 
             throw;
+        }
+    }
+
+    private async Task OrchestrateDeviceCommandsAsync(
+        ISender sender,
+        Guid ringEventId)
+    {
+        try
+        {
+            await sender.Send(
+                new OrchestrateDeviceCommandsCommand(ringEventId),
+                CancellationToken.None);
+        }
+        catch (DbUpdateException ex)
+        {
+            // A concurrent delivery recorded the same intent first; it owns the publish.
+            _logger.LogWarning(
+                ex,
+                "Concurrent orchestration for ring event {RingEventId}; intent already recorded.",
+                ringEventId);
         }
     }
 }
