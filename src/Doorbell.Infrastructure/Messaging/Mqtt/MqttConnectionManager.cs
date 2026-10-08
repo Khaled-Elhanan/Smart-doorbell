@@ -11,10 +11,10 @@ public sealed class MqttConnectionManager
     private readonly ILogger<MqttConnectionManager> _logger;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private readonly IMqttClient _client;
-
-    private string? _subscriptionTopic;
-
-    private string? _subscribedTopic;
+    private readonly HashSet<string> _desiredTopics =
+        new(StringComparer.Ordinal);
+    private readonly HashSet<string> _subscribedTopics =
+        new(StringComparer.Ordinal);
 
     public MqttConnectionManager(
         MqttClientFactory factory,
@@ -56,7 +56,7 @@ public sealed class MqttConnectionManager
                     options,
                     cancellationToken);
 
-                _subscribedTopic = null;
+                _subscribedTopics.Clear();
 
                 _logger.LogInformation(
                     "Connected to MQTT broker at {Host}:{Port}",
@@ -64,28 +64,36 @@ public sealed class MqttConnectionManager
                     _options.Port);
             }
 
-            var topic = _subscriptionTopic;
+            var topicsToSubscribe = _desiredTopics
+                .Where(topic => !_subscribedTopics.Contains(topic))
+                .ToList();
 
-            if (topic is not null &&
-                _subscribedTopic != topic)
+            if (topicsToSubscribe.Count > 0)
             {
                 var subscribeOptions =
-                    _factory.CreateSubscribeOptionsBuilder()
+                    _factory.CreateSubscribeOptionsBuilder();
+
+                foreach (var topic in topicsToSubscribe)
+                {
+                    subscribeOptions = subscribeOptions
                         .WithTopicFilter(
                             filter => filter
                                 .WithTopic(topic)
-                                .WithAtLeastOnceQoS())
-                        .Build();
+                                .WithAtLeastOnceQoS());
+                }
 
                 await _client.SubscribeAsync(
-                    subscribeOptions,
+                    subscribeOptions.Build(),
                     cancellationToken);
 
-                _subscribedTopic = topic;
+                foreach (var topic in topicsToSubscribe)
+                {
+                    _subscribedTopics.Add(topic);
 
-                _logger.LogInformation(
-                    "Subscribed to MQTT topic {Topic}",
-                    topic);
+                    _logger.LogInformation(
+                        "Subscribed to MQTT topic {Topic}",
+                        topic);
+                }
             }
         }
         finally
@@ -94,12 +102,21 @@ public sealed class MqttConnectionManager
         }
     }
 
-    public Task SubscribeAsync(
+    public async Task SubscribeAsync(
         string topic,
         CancellationToken cancellationToken)
     {
-        _subscriptionTopic = topic;
+        await _connectionLock.WaitAsync(cancellationToken);
 
-        return EnsureConnectedAsync(cancellationToken);
+        try
+        {
+            _desiredTopics.Add(topic);
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
     }
 }

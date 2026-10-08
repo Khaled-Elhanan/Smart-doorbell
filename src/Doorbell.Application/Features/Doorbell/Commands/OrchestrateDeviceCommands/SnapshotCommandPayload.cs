@@ -6,5 +6,6 @@ namespace Doorbell.Application.Features.Doorbell.Commands.OrchestrateDeviceComma
 {
     public sealed record SnapshotCommandPayload(
      string RequestId,
-     Guid DeviceId);
+     Guid DeviceId,
+     string UploadUrl);
 }

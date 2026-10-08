@@ -17,8 +17,12 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
     private readonly IDeviceCommandRepository _deviceCommandRepository;
     private readonly IMqttCommandPublisher _mqttCommandPublisher;
     private readonly IStorageKeyGenerator _storageKeyGenerator;
+    private readonly IObjectStorage _objectStorage;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<OrchestrateDeviceCommandsCommandHandler> _logger;
+
+    private static readonly TimeSpan UploadUrlLifetime =
+        TimeSpan.FromMinutes(5);
 
     public OrchestrateDeviceCommandsCommandHandler(
         IDoorbellRingEventRepository ringEventRepository,
@@ -26,6 +30,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         IDeviceCommandRepository deviceCommandRepository,
         IMqttCommandPublisher mqttCommandPublisher,
         IStorageKeyGenerator storageKeyGenerator,
+        IObjectStorage objectStorage,
         IUnitOfWork unitOfWork,
         ILogger<OrchestrateDeviceCommandsCommandHandler> logger)
     {
@@ -34,6 +39,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         _deviceCommandRepository = deviceCommandRepository;
         _mqttCommandPublisher = mqttCommandPublisher;
         _storageKeyGenerator = storageKeyGenerator;
+        _objectStorage = objectStorage;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -151,11 +157,17 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
 
         if (snapshotCommand.Status == DeviceCommandStatus.Pending)
         {
+            var uploadUrl = await _objectStorage.CreateUploadUrlAsync(
+                snapshotCommand.StorageKey!,
+                UploadUrlLifetime,
+                cancellationToken);
+
             await _mqttCommandPublisher.PublishAsync(
                 composition.SnapshotCommandTopic,
                 new SnapshotCommandPayload(
                     snapshotRequestId,
-                    ringEvent.DeviceId),
+                    ringEvent.DeviceId,
+                    uploadUrl.ToString()),
                 cancellationToken);
 
             snapshotCommand.MarkSent();

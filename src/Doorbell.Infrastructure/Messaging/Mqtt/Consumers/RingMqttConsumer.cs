@@ -71,6 +71,13 @@ public sealed class RingMqttConsumer : BackgroundService
     private async Task HandleMessageAsync(
         MqttApplicationMessageReceivedEventArgs args)
     {
+        if (!MqttTopicFilter.IsMatch(
+                args.ApplicationMessage.Topic,
+                _options.RingTopic))
+        {
+            return;
+        }
+
         args.AutoAcknowledge = false;
 
         try

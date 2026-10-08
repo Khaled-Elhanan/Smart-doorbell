@@ -15,6 +15,16 @@ public sealed class DeviceCommandRepository : IDeviceCommandRepository
         _context = context;
     }
 
+    public Task<DeviceCommand?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return _context.DeviceCommands
+            .SingleOrDefaultAsync(
+                x => x.Id == id,
+                cancellationToken);
+    }
+
     public Task<DeviceCommand?> GetByRequestIdAsync(
         string requestId,
         CancellationToken cancellationToken)
@@ -35,6 +45,35 @@ public sealed class DeviceCommandRepository : IDeviceCommandRepository
                 x => x.RingEventId == ringEventId
                      && x.CommandType == commandType,
                 cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SnapshotCommandTimeout>>
+        GetSnapshotTimeoutCandidatesAsync(
+            CancellationToken cancellationToken)
+    {
+        var rows = await (
+            from command in _context.DeviceCommands
+            join composition in _context.AdvancedDoorbellCompositions
+                on command.DeviceId equals composition.DeviceId
+            where command.CommandType == DeviceCommandType.Snapshot
+                  && command.Status == DeviceCommandStatus.Sent
+                  && command.SentAtUtc != null
+            select new
+            {
+                command.Id,
+                command.RingEventId,
+                SentAtUtc = command.SentAtUtc!.Value,
+                composition.SnapshotTimeoutSeconds
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new SnapshotCommandTimeout(
+                row.Id,
+                row.RingEventId,
+                row.SentAtUtc,
+                row.SnapshotTimeoutSeconds))
+            .ToList();
     }
 
     public async Task AddAsync(

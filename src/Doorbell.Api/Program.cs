@@ -1,3 +1,4 @@
+using Doorbell.Api.Endpoints;
 using Doorbell.Application;
 using Doorbell.Infrastructure;
 using Doorbell.Infrastructure.Persistence.Context;
@@ -27,6 +28,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.MapObjectStorageEndpoints();
 
 app.MapControllers();
 

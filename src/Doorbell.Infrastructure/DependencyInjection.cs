@@ -2,6 +2,7 @@
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Abstractions.Repositories;
 using Doorbell.Application.Abstractions.Storage;
+using Doorbell.Infrastructure.BackgroundJobs;
 using Doorbell.Infrastructure.Messaging.Mqtt;
 using Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
 using Doorbell.Infrastructure.Messaging.Mqtt.Publishers;
@@ -21,6 +22,12 @@ namespace Doorbell.Infrastructure
         {
             services.Configure<MqttOptions>(
                 configuration.GetSection("Mqtt"));
+
+            services.Configure<ObjectStorageOptions>(
+                configuration.GetSection("ObjectStorage"));
+
+            services.Configure<SnapshotReconcilerOptions>(
+                configuration.GetSection("SnapshotReconciler"));
 
             services.AddScoped<IUserRepository, UserRepository>();
 
@@ -44,6 +51,11 @@ namespace Doorbell.Infrastructure
                 IStorageKeyGenerator,
                 StorageKeyGenerator>();
 
+            services.AddSingleton<LocalObjectStorage>();
+
+            services.AddSingleton<IObjectStorage>(
+                provider => provider.GetRequiredService<LocalObjectStorage>());
+
             services.AddSingleton<MqttClientFactory>();
 
             services.AddSingleton<MqttConnectionManager>();
@@ -53,6 +65,10 @@ namespace Doorbell.Infrastructure
                 MqttCommandPublisher>();
 
             services.AddHostedService<RingMqttConsumer>();
+
+            services.AddHostedService<SnapshotResultConsumer>();
+
+            services.AddHostedService<SnapshotTimeoutReconciler>();
 
             return services;
         }

@@ -5,6 +5,10 @@ namespace Doorbell.Application.Abstractions.Repositories;
 
 public interface IDeviceCommandRepository
 {
+    Task<DeviceCommand?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
     Task<DeviceCommand?> GetByRequestIdAsync(
         string requestId,
         CancellationToken cancellationToken);
@@ -14,7 +18,17 @@ public interface IDeviceCommandRepository
         DeviceCommandType commandType,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<SnapshotCommandTimeout>>
+        GetSnapshotTimeoutCandidatesAsync(
+            CancellationToken cancellationToken);
+
     Task AddAsync(
         DeviceCommand deviceCommand,
         CancellationToken cancellationToken);
 }
+
+public sealed record SnapshotCommandTimeout(
+    Guid CommandId,
+    Guid RingEventId,
+    DateTime SentAtUtc,
+    int TimeoutSeconds);
