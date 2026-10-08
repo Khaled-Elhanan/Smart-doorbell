@@ -26,8 +26,8 @@ namespace Doorbell.Infrastructure
             services.Configure<ObjectStorageOptions>(
                 configuration.GetSection("ObjectStorage"));
 
-            services.Configure<SnapshotReconcilerOptions>(
-                configuration.GetSection("SnapshotReconciler"));
+            services.Configure<DeviceCommandReconcilerOptions>(
+                configuration.GetSection("DeviceCommandReconciler"));
 
             services.AddScoped<IUserRepository, UserRepository>();
 
@@ -68,7 +68,9 @@ namespace Doorbell.Infrastructure
 
             services.AddHostedService<SnapshotResultConsumer>();
 
-            services.AddHostedService<SnapshotTimeoutReconciler>();
+            services.AddHostedService<ChimeAckConsumer>();
+
+            services.AddHostedService<DeviceCommandTimeoutReconciler>();
 
             return services;
         }

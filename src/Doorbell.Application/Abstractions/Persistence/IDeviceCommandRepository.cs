@@ -22,12 +22,23 @@ public interface IDeviceCommandRepository
         GetSnapshotTimeoutCandidatesAsync(
             CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<ChimeCommandTimeout>>
+        GetChimeTimeoutCandidatesAsync(
+            int timeoutSeconds,
+            CancellationToken cancellationToken);
+
     Task AddAsync(
         DeviceCommand deviceCommand,
         CancellationToken cancellationToken);
 }
 
 public sealed record SnapshotCommandTimeout(
+    Guid CommandId,
+    Guid RingEventId,
+    DateTime SentAtUtc,
+    int TimeoutSeconds);
+
+public sealed record ChimeCommandTimeout(
     Guid CommandId,
     Guid RingEventId,
     DateTime SentAtUtc,

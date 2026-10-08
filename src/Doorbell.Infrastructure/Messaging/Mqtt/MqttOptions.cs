@@ -18,6 +18,9 @@ namespace Doorbell.Infrastructure.Messaging.Mqtt
         public string SnapshotResultTopic { get; set; } =
             "devices/+/camera/+/snapshot/result";
 
+        public string ChimeAckTopic { get; set; } =
+            "devices/+/chime/+/play/ack";
+
         public int SessionExpirySeconds { get; set; } = 86400;
     }
 }

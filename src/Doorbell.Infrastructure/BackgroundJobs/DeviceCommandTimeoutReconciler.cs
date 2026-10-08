@@ -1,4 +1,5 @@
 using Doorbell.Application.Abstractions.Repositories;
+using Doorbell.Application.Features.Doorbell.Commands.ReconcileChimeTimeouts;
 using Doorbell.Application.Features.Doorbell.Commands.ReconcileSnapshotTimeouts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,20 +10,24 @@ using Microsoft.Extensions.Options;
 
 namespace Doorbell.Infrastructure.BackgroundJobs;
 
-public sealed class SnapshotTimeoutReconciler : BackgroundService
+public sealed class DeviceCommandTimeoutReconciler : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeSpan _interval;
-    private readonly ILogger<SnapshotTimeoutReconciler> _logger;
+    private readonly int _chimeTimeoutSeconds;
+    private readonly ILogger<DeviceCommandTimeoutReconciler> _logger;
 
-    public SnapshotTimeoutReconciler(
+    public DeviceCommandTimeoutReconciler(
         IServiceScopeFactory scopeFactory,
-        IOptions<SnapshotReconcilerOptions> options,
-        ILogger<SnapshotTimeoutReconciler> logger)
+        IOptions<DeviceCommandReconcilerOptions> options,
+        ILogger<DeviceCommandTimeoutReconciler> logger)
     {
         _scopeFactory = scopeFactory;
         _interval = TimeSpan.FromSeconds(
             Math.Max(1, options.Value.IntervalSeconds));
+        _chimeTimeoutSeconds = Math.Max(
+            1,
+            options.Value.ChimeTimeoutSeconds);
         _logger = logger;
     }
 
@@ -56,7 +61,7 @@ public sealed class SnapshotTimeoutReconciler : BackgroundService
             {
                 _logger.LogError(
                     ex,
-                    "Snapshot timeout reconciliation failed.");
+                    "Device command timeout reconciliation failed.");
             }
         }
     }
@@ -72,12 +77,17 @@ public sealed class SnapshotTimeoutReconciler : BackgroundService
         var sender =
             scope.ServiceProvider.GetRequiredService<ISender>();
 
-        var candidates =
+        var snapshotCandidates =
             await repository.GetSnapshotTimeoutCandidatesAsync(stoppingToken);
+
+        var chimeCandidates =
+            await repository.GetChimeTimeoutCandidatesAsync(
+                _chimeTimeoutSeconds,
+                stoppingToken);
 
         var now = DateTime.UtcNow;
 
-        foreach (var candidate in candidates)
+        foreach (var candidate in snapshotCandidates)
         {
             if ((now - candidate.SentAtUtc).TotalSeconds <
                 candidate.TimeoutSeconds)
@@ -97,6 +107,30 @@ public sealed class SnapshotTimeoutReconciler : BackgroundService
                 _logger.LogWarning(
                     ex,
                     "Concurrent update while timing out snapshot for ring event {RingEventId}; skipped.",
+                    candidate.RingEventId);
+            }
+        }
+
+        foreach (var candidate in chimeCandidates)
+        {
+            if ((now - candidate.SentAtUtc).TotalSeconds <
+                candidate.TimeoutSeconds)
+            {
+                continue;
+            }
+
+            try
+            {
+                await sender.Send(
+                    new TimeOutChimeCommand(candidate),
+                    stoppingToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // A chime ack or an earlier pass already changed this row.
+                _logger.LogWarning(
+                    ex,
+                    "Concurrent update while timing out chime for ring event {RingEventId}; skipped.",
                     candidate.RingEventId);
             }
         }

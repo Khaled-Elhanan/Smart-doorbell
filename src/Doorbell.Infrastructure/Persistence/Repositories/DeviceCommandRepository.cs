@@ -76,6 +76,33 @@ public sealed class DeviceCommandRepository : IDeviceCommandRepository
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ChimeCommandTimeout>>
+        GetChimeTimeoutCandidatesAsync(
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+    {
+        var rows = await (
+            from command in _context.DeviceCommands
+            where command.CommandType == DeviceCommandType.Chime
+                  && command.Status == DeviceCommandStatus.Sent
+                  && command.SentAtUtc != null
+            select new
+            {
+                command.Id,
+                command.RingEventId,
+                SentAtUtc = command.SentAtUtc!.Value
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new ChimeCommandTimeout(
+                row.Id,
+                row.RingEventId,
+                row.SentAtUtc,
+                timeoutSeconds))
+            .ToList();
+    }
+
     public async Task AddAsync(
         DeviceCommand deviceCommand,
         CancellationToken cancellationToken)
