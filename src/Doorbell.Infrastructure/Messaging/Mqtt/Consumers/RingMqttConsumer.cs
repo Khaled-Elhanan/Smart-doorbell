@@ -17,17 +17,20 @@ public sealed class RingMqttConsumer : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly MqttConnectionManager _connectionManager;
+    private readonly MqttDeadLetterPublisher _deadLetter;
     private readonly MqttOptions _options;
     private readonly ILogger<RingMqttConsumer> _logger;
 
     public RingMqttConsumer(
         IServiceScopeFactory scopeFactory,
         MqttConnectionManager connectionManager,
+        MqttDeadLetterPublisher deadLetter,
         IOptions<MqttOptions> options,
         ILogger<RingMqttConsumer> logger)
     {
         _scopeFactory = scopeFactory;
         _connectionManager = connectionManager;
+        _deadLetter = deadLetter;
         _options = options.Value;
         _logger = logger;
     }
@@ -80,36 +83,91 @@ public sealed class RingMqttConsumer : BackgroundService
 
         args.AutoAcknowledge = false;
 
+        var payload =
+            args.ApplicationMessage.Payload.ToArray();
+
+        RingMqttMessage? message;
+
         try
         {
-            var payload =
-                args.ApplicationMessage.Payload.ToArray();
+            message =
+                JsonSerializer.Deserialize<RingMqttMessage>(payload);
+        }
+        catch (JsonException ex)
+        {
+            // Poison message: preserve it, then ACK so it leaves the queue.
+            _logger.LogError(
+                ex,
+                "Invalid ring MQTT payload on {Topic}; dead-lettering.",
+                args.ApplicationMessage.Topic);
 
-            var message =
-                JsonSerializer.Deserialize<RingMqttMessage>(
-                    payload);
+            await _deadLetter.PublishAsync(
+                args.ApplicationMessage.Topic,
+                payload,
+                CancellationToken.None);
 
-            if (message is null)
-            {
-                _logger.LogWarning(
-                    "Received empty or invalid MQTT message.");
+            await args.AcknowledgeAsync(
+                CancellationToken.None);
 
-                await args.AcknowledgeAsync(
-                    CancellationToken.None);
+            return;
+        }
 
-                return;
-            }
+        if (message is null)
+        {
+            _logger.LogWarning(
+                "Received empty ring MQTT message on {Topic}; dead-lettering.",
+                args.ApplicationMessage.Topic);
 
-            _logger.LogInformation(
-                "Received ring event {EventId} for device {DeviceId}",
-                message.EventId,
-                message.DeviceId);
+            await _deadLetter.PublishAsync(
+                args.ApplicationMessage.Topic,
+                payload,
+                CancellationToken.None);
 
-            var command = new ReceiveRingCommand(
+            await args.AcknowledgeAsync(
+                CancellationToken.None);
+
+            return;
+        }
+
+        // C7: the topic deviceId is authoritative; the body must match it.
+        var topicDeviceId = ExtractDeviceIdFromTopic(
+            args.ApplicationMessage.Topic);
+
+        if (topicDeviceId is null ||
+            !string.Equals(
+                topicDeviceId,
+                message.DeviceId.ToString("D"),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Ring payload deviceId {PayloadDeviceId} does not match topic deviceId {TopicDeviceId} on {Topic}; rejected and dead-lettered.",
                 message.DeviceId,
-                message.EventId,
-                message.Timestamp);
+                topicDeviceId ?? "<missing>",
+                args.ApplicationMessage.Topic);
 
+            await _deadLetter.PublishAsync(
+                args.ApplicationMessage.Topic,
+                payload,
+                CancellationToken.None);
+
+            await args.AcknowledgeAsync(
+                CancellationToken.None);
+
+            return;
+        }
+
+        _logger.LogInformation(
+            "Received ring event {EventId} for device {DeviceId}",
+            message.EventId,
+            message.DeviceId);
+
+        var command = new ReceiveRingCommand(
+            message.DeviceId,
+            message.EventId,
+            message.Timestamp);
+
+        try
+        {
             using var scope =
                 _scopeFactory.CreateScope();
 
@@ -136,22 +194,16 @@ public sealed class RingMqttConsumer : BackgroundService
                 result.RingEventId,
                 result.IsNew);
         }
-        catch (JsonException ex)
-        {
-            _logger.LogError(
-                ex,
-                "Invalid ring MQTT payload.");
-
-            await args.AcknowledgeAsync(
-                CancellationToken.None);
-        }
         catch (Exception ex)
         {
+            // Explicit failure policy: do NOT ACK, and mark processing failed so
+            // the broker redelivers this QoS1 message (at-least-once delivery).
             _logger.LogError(
                 ex,
-                "Failed to process ring MQTT message.");
+                "Failed to process ring MQTT message on {Topic}.",
+                args.ApplicationMessage.Topic);
 
-            throw;
+            args.ProcessingFailed = true;
         }
     }
 
@@ -173,5 +225,12 @@ public sealed class RingMqttConsumer : BackgroundService
                 "Concurrent orchestration for ring event {RingEventId}; intent already recorded.",
                 ringEventId);
         }
+    }
+
+    private static string? ExtractDeviceIdFromTopic(string topic)
+    {
+        var parts = topic.Split('/');
+
+        return parts.Length >= 2 ? parts[1] : null;
     }
 }

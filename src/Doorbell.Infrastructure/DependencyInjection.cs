@@ -20,8 +20,16 @@ namespace Doorbell.Infrastructure
             this IServiceCollection services,
             IConfiguration configuration)
         {
-            services.Configure<MqttOptions>(
-                configuration.GetSection("Mqtt"));
+            services.AddOptions<MqttOptions>()
+                .Bind(configuration.GetSection("Mqtt"))
+                .Validate(
+                    options => !string.IsNullOrWhiteSpace(options.Host)
+                               && options.Port is > 0 and <= 65535
+                               && options.SessionExpirySeconds >= 0,
+                    "Invalid Mqtt configuration: Host is required, "
+                    + "Port must be in the range 1-65535, "
+                    + "SessionExpirySeconds must be >= 0.")
+                .ValidateOnStart();
 
             services.Configure<ObjectStorageOptions>(
                 configuration.GetSection("ObjectStorage"));
@@ -59,6 +67,8 @@ namespace Doorbell.Infrastructure
             services.AddSingleton<MqttClientFactory>();
 
             services.AddSingleton<MqttConnectionManager>();
+
+            services.AddSingleton<MqttDeadLetterPublisher>();
 
             services.AddSingleton<
                 IMqttCommandPublisher,

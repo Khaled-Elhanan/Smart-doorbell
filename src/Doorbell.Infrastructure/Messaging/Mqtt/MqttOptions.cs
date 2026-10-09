@@ -10,7 +10,15 @@ namespace Doorbell.Infrastructure.Messaging.Mqtt
 
         public int Port { get; set; } = 1883;
 
-        public string ClientId { get; set; } = "doorbell-backend";
+        // Empty/absent -> a unique per-instance id is generated so replicas do not
+        // evict each other's broker session (static ClientId made the app single-instance).
+        public string? ClientId { get; set; }
+
+        public string? Username { get; set; }
+
+        public string? Password { get; set; }
+
+        public bool UseTls { get; set; }
 
         public string RingTopic { get; set; } =
             "devices/+/doorbell/ring";

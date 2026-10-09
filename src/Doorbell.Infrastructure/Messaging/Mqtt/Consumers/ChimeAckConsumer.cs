@@ -16,17 +16,20 @@ public sealed class ChimeAckConsumer : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly MqttConnectionManager _connectionManager;
+    private readonly MqttDeadLetterPublisher _deadLetter;
     private readonly MqttOptions _options;
     private readonly ILogger<ChimeAckConsumer> _logger;
 
     public ChimeAckConsumer(
         IServiceScopeFactory scopeFactory,
         MqttConnectionManager connectionManager,
+        MqttDeadLetterPublisher deadLetter,
         IOptions<MqttOptions> options,
         ILogger<ChimeAckConsumer> logger)
     {
         _scopeFactory = scopeFactory;
         _connectionManager = connectionManager;
+        _deadLetter = deadLetter;
         _options = options.Value;
         _logger = logger;
     }
@@ -79,30 +82,58 @@ public sealed class ChimeAckConsumer : BackgroundService
 
         args.AutoAcknowledge = false;
 
+        var payload =
+            args.ApplicationMessage.Payload.ToArray();
+
+        ChimeAckMqttMessage? message;
+
         try
         {
-            var payload =
-                args.ApplicationMessage.Payload.ToArray();
-
-            var message =
+            message =
                 JsonSerializer.Deserialize<ChimeAckMqttMessage>(
                     payload);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Invalid chime ack MQTT payload on {Topic}; dead-lettering.",
+                args.ApplicationMessage.Topic);
 
-            if (message is null)
-            {
-                _logger.LogWarning(
-                    "Received empty or invalid chime ack message.");
+            await _deadLetter.PublishAsync(
+                args.ApplicationMessage.Topic,
+                payload,
+                CancellationToken.None);
 
-                await args.AcknowledgeAsync(
-                    CancellationToken.None);
+            await args.AcknowledgeAsync(
+                CancellationToken.None);
 
-                return;
-            }
+            return;
+        }
 
-            _logger.LogInformation(
-                "Received chime ack for RequestId {RequestId}",
-                message.RequestId);
+        if (message is null)
+        {
+            _logger.LogWarning(
+                "Received empty or invalid chime ack message on {Topic}; dead-lettering.",
+                args.ApplicationMessage.Topic);
 
+            await _deadLetter.PublishAsync(
+                args.ApplicationMessage.Topic,
+                payload,
+                CancellationToken.None);
+
+            await args.AcknowledgeAsync(
+                CancellationToken.None);
+
+            return;
+        }
+
+        _logger.LogInformation(
+            "Received chime ack for RequestId {RequestId}",
+            message.RequestId);
+
+        try
+        {
             using var scope =
                 _scopeFactory.CreateScope();
 
@@ -121,15 +152,6 @@ public sealed class ChimeAckConsumer : BackgroundService
                 "Successfully processed and acknowledged chime ack for RequestId {RequestId}",
                 message.RequestId);
         }
-        catch (JsonException ex)
-        {
-            _logger.LogError(
-                ex,
-                "Invalid chime ack MQTT payload.");
-
-            await args.AcknowledgeAsync(
-                CancellationToken.None);
-        }
         catch (DbUpdateException ex)
         {
             // A duplicate or concurrent ack already applied the same state.
@@ -142,11 +164,13 @@ public sealed class ChimeAckConsumer : BackgroundService
         }
         catch (Exception ex)
         {
+            // Explicit failure policy: do NOT ACK so the message is redelivered.
             _logger.LogError(
                 ex,
-                "Failed to process chime ack MQTT message.");
+                "Failed to process chime ack MQTT message on {Topic}.",
+                args.ApplicationMessage.Topic);
 
-            throw;
+            args.ProcessingFailed = true;
         }
     }
 }
