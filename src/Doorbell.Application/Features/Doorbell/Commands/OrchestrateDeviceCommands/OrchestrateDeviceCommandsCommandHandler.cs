@@ -15,6 +15,8 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
     private readonly IDoorbellRingEventRepository _ringEventRepository;
     private readonly IDoorbellCompositionRepository _compositionRepository;
     private readonly IDeviceCommandRepository _deviceCommandRepository;
+    private readonly IDeviceRepository _deviceRepository;
+    private readonly IOutboxRepository _outboxRepository;
     private readonly IMqttCommandPublisher _mqttCommandPublisher;
     private readonly IStorageKeyGenerator _storageKeyGenerator;
     private readonly IObjectStorage _objectStorage;
@@ -28,6 +30,8 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         IDoorbellRingEventRepository ringEventRepository,
         IDoorbellCompositionRepository compositionRepository,
         IDeviceCommandRepository deviceCommandRepository,
+        IDeviceRepository deviceRepository,
+        IOutboxRepository outboxRepository,
         IMqttCommandPublisher mqttCommandPublisher,
         IStorageKeyGenerator storageKeyGenerator,
         IObjectStorage objectStorage,
@@ -37,6 +41,8 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
         _ringEventRepository = ringEventRepository;
         _compositionRepository = compositionRepository;
         _deviceCommandRepository = deviceCommandRepository;
+        _deviceRepository = deviceRepository;
+        _outboxRepository = outboxRepository;
         _mqttCommandPublisher = mqttCommandPublisher;
         _storageKeyGenerator = storageKeyGenerator;
         _objectStorage = objectStorage;
@@ -143,6 +149,31 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
 
         if (intentChanged)
         {
+            var notification =
+                await _outboxRepository.GetByRingEventIdAsync(
+                    ringEvent.Id,
+                    cancellationToken);
+
+            if (notification is null)
+            {
+                var device =
+                    await _deviceRepository.GetByIdAsync(
+                        ringEvent.DeviceId,
+                        cancellationToken);
+
+                if (device is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Device '{ringEvent.DeviceId}' for ring event '{ringEvent.Id}' was not found.");
+                }
+
+                await _outboxRepository.AddAsync(
+                    NotificationOutbox.Create(
+                        ringEvent.Id,
+                        device.OwnerUserId),
+                    cancellationToken);
+            }
+
             await _unitOfWork.SaveChangesAsync(
                 cancellationToken);
 

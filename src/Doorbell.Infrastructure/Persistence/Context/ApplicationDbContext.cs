@@ -25,6 +25,12 @@ namespace Doorbell.Infrastructure.Persistence.Context
             Set<DoorbellRingEvent>();
         public DbSet<DeviceCommand> DeviceCommands { get; set; }
 
+        public DbSet<NotificationOutbox> NotificationOutboxes =>
+            Set<NotificationOutbox>();
+
+        public DbSet<NotificationAttempt> NotificationAttempts =>
+            Set<NotificationAttempt>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(

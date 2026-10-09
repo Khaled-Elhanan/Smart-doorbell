@@ -57,6 +57,8 @@ namespace Doorbell.Infrastructure
 
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+            services.AddScoped<IOutboxRepository, OutboxRepository>();
+
             services.AddScoped<
                 IDeviceCommandRepository,
                 DeviceCommandRepository>();

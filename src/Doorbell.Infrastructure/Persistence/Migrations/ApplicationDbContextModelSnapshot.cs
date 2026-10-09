@@ -214,6 +214,73 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.ToTable("DoorbellRingEvents", (string)null);
                 });
 
+            modelBuilder.Entity("Doorbell.Domain.Entities.NotificationAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("AttemptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("OutboxId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Succeeded")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutboxId", "AttemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("NotificationAttempts", (string)null);
+                });
+
+            modelBuilder.Entity("Doorbell.Domain.Entities.NotificationOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RingEventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId");
+
+                    b.HasIndex("RingEventId")
+                        .IsUnique();
+
+                    b.ToTable("NotificationOutboxes", (string)null);
+                });
+
             modelBuilder.Entity("Doorbell.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -284,6 +351,30 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.HasOne("Doorbell.Domain.Entities.Device", null)
                         .WithMany()
                         .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Doorbell.Domain.Entities.NotificationAttempt", b =>
+                {
+                    b.HasOne("Doorbell.Domain.Entities.NotificationOutbox", null)
+                        .WithMany()
+                        .HasForeignKey("OutboxId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Doorbell.Domain.Entities.NotificationOutbox", b =>
+                {
+                    b.HasOne("Doorbell.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Doorbell.Domain.Entities.DoorbellRingEvent", null)
+                        .WithMany()
+                        .HasForeignKey("RingEventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
