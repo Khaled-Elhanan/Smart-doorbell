@@ -1,12 +1,14 @@
 ﻿using Doorbell.Application.Abstractions.Messaging;
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Abstractions.Repositories;
+using Doorbell.Application.Abstractions.Security;
 using Doorbell.Application.Abstractions.Storage;
 using Doorbell.Infrastructure.BackgroundJobs;
 using Doorbell.Infrastructure.Messaging.Mqtt;
 using Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
 using Doorbell.Infrastructure.Messaging.Mqtt.Publishers;
 using Doorbell.Infrastructure.Persistence.Repositories;
+using Doorbell.Infrastructure.Security;
 using Doorbell.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +40,10 @@ namespace Doorbell.Infrastructure
                 configuration.GetSection("DeviceCommandReconciler"));
 
             services.AddScoped<IUserRepository, UserRepository>();
+
+            services.AddHttpContextAccessor();
+
+            services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
             services.AddScoped<IDeviceRepository, DeviceRepository>();
 

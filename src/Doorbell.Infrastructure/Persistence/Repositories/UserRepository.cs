@@ -35,5 +35,15 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
                     x => x.Id == id,
                     cancellationToken);
         }
+
+        public Task<User?> GetBySubjectIdAsync(
+            string subjectId,
+            CancellationToken cancellationToken)
+        {
+            return _context.Users
+                .FirstOrDefaultAsync(
+                    x => x.SubjectId == subjectId,
+                    cancellationToken);
+        }
     }
 }

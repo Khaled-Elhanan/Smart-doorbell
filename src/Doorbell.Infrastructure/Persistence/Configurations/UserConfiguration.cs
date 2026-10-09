@@ -1,9 +1,6 @@
 ﻿using Doorbell.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Doorbell.Infrastructure.Persistence.Configurations
 {
@@ -19,6 +16,18 @@ namespace Doorbell.Infrastructure.Persistence.Configurations
             builder.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
+
+            builder.Property(x => x.SubjectId)
+                .HasMaxLength(255);
+
+            builder.Property(x => x.Email)
+                .HasMaxLength(320);
+
+            builder.Property(x => x.Username)
+                .HasMaxLength(100);
+
+            builder.HasIndex(x => x.SubjectId)
+                .IsUnique();
         }
     }
-    }
+}

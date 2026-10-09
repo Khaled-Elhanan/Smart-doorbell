@@ -1,7 +1,4 @@
 ﻿using Doorbell.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Doorbell.Application.Abstractions.Persistence
 {
@@ -13,6 +10,10 @@ namespace Doorbell.Application.Abstractions.Persistence
 
         Task<User?> GetByIdAsync(
             Guid id,
+            CancellationToken cancellationToken);
+
+        Task<User?> GetBySubjectIdAsync(
+            string subjectId,
             CancellationToken cancellationToken);
     }
 }
