@@ -1,7 +1,9 @@
+using Doorbell.Api.Authentication;
 using Doorbell.Api.Demo;
 using Doorbell.Api.Endpoints;
 using Doorbell.Application;
 using Doorbell.Infrastructure;
+using Doorbell.Infrastructure.Messaging.Notifications;
 using Doorbell.Infrastructure.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +20,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             "MyConnection")));
 
 builder.Services.AddControllers();
+
+builder.Services.AddSignalR();
+
+builder.Services.AddDoorbellAuthentication(
+    builder.Configuration,
+    builder.Environment);
 
 builder.Services.AddExceptionHandler<Doorbell.Api.ExceptionHandling.GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -57,7 +65,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+
+app.UseAuthorization();
+
 app.MapObjectStorageEndpoints();
+
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.MapControllers();
 

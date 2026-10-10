@@ -60,6 +60,7 @@ public class GlobalExceptionHandler : IExceptionHandler
         return exception switch
         {
             ValidationException => (StatusCodes.Status400BadRequest, exception.Message, "Validation Error"),
+            UnauthorizedException => (StatusCodes.Status401Unauthorized, exception.Message, "Unauthorized"),
             NotFoundException => (StatusCodes.Status404NotFound, exception.Message, "Resource Not Found"),
             ForbiddenException => (StatusCodes.Status403Forbidden, exception.Message, "Forbidden"),
             DomainException => (StatusCodes.Status400BadRequest, exception.Message, "Domain Error"),

@@ -30,6 +30,7 @@ public class GlobalExceptionHandlerTests
     [Theory]
     [InlineData(typeof(NotFoundException), StatusCodes.Status404NotFound)]
     [InlineData(typeof(ForbiddenException), StatusCodes.Status403Forbidden)]
+    [InlineData(typeof(UnauthorizedException), StatusCodes.Status401Unauthorized)]
     [InlineData(typeof(ValidationException), StatusCodes.Status400BadRequest)]
     [InlineData(typeof(DomainException), StatusCodes.Status400BadRequest)]
     [InlineData(typeof(Exception), StatusCodes.Status500InternalServerError)]
