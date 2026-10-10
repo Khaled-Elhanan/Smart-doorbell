@@ -5,6 +5,7 @@ using Doorbell.Application.Abstractions.Storage;
 using Doorbell.Application.Features.Devices.Commands.ConfigureDoorbell;
 using Doorbell.Application.Features.Devices.Commands.CreateDevice;
 using Doorbell.Application.Features.Users.Commands.CreateUser;
+using Doorbell.Domain.Entities;
 using Doorbell.Domain.Enums;
 using Doorbell.Infrastructure.Messaging.Mqtt.Models;
 using MediatR;
@@ -22,7 +23,18 @@ public sealed record DemoOutboxStatus(
     string? RecipientUserId,
     string? RecipientName,
     string Status,
-    int AttemptCount);
+    int AttemptCount,
+    string? LastChannel,
+    bool LastUsedFallback,
+    DateTime? LastAttemptAtUtc,
+    string? LastError,
+    bool Exhausted);
+
+public sealed record DemoIdentity(
+    string SubjectId,
+    string Name,
+    Guid UserId,
+    Guid DeviceId);
 
 public sealed record DemoAssetStatus(
     bool SoundPresent,
@@ -40,6 +52,7 @@ public sealed record DemoStatusResponse(
     DemoCommandStatus? SnapshotCommand,
     DemoCommandStatus? ChimeCommand,
     DemoOutboxStatus? Outbox,
+    string? AcknowledgeStatus,
     string? ImageUrl,
     string Phase,
     bool RunCompleted,
@@ -53,6 +66,10 @@ public sealed class DemoSimulationService
         public Guid UserId { get; init; }
 
         public Guid DeviceId { get; init; }
+
+        public string SubjectId { get; init; } = null!;
+
+        public string Name { get; init; } = null!;
 
         public string CameraEntityCode { get; init; } = null!;
 
@@ -108,6 +125,18 @@ public sealed class DemoSimulationService
         return runId;
     }
 
+    public async Task<DemoIdentity> GetIdentityAsync(
+        CancellationToken cancellationToken)
+    {
+        var fixture = await EnsureFixtureAsync(cancellationToken);
+
+        return new DemoIdentity(
+            fixture.SubjectId,
+            fixture.Name,
+            fixture.UserId,
+            fixture.DeviceId);
+    }
+
     public async Task<DemoStatusResponse> GetStatusAsync(
         string runId,
         CancellationToken cancellationToken)
@@ -149,10 +178,18 @@ public sealed class DemoSimulationService
                 SnapshotCommand: null,
                 ChimeCommand: null,
                 Outbox: null,
+                AcknowledgeStatus: null,
                 ImageUrl: null,
                 Phase: "running",
                 RunCompleted: false,
-                Steps: BuildSteps(fixture, ring: null, snapshot: null, chime: null, outbox: null),
+                Steps: BuildSteps(
+                    fixture,
+                    ring: null,
+                    snapshot: null,
+                    chime: null,
+                    outbox: null,
+                    attempts: Array.Empty<NotificationAttempt>(),
+                    maxAttempts: _options.Value.MaxAttempts),
                 Assets: assets);
         }
 
@@ -169,6 +206,12 @@ public sealed class DemoSimulationService
         var outbox = await outboxRepository.GetByRingEventIdAsync(
             ring.Id,
             cancellationToken);
+
+        IReadOnlyList<NotificationAttempt> attempts = outbox is null
+            ? Array.Empty<NotificationAttempt>()
+            : await outboxRepository.GetAttemptsAsync(
+                outbox.Id,
+                cancellationToken);
 
         string? imageUrl = null;
 
@@ -198,9 +241,11 @@ public sealed class DemoSimulationService
             ring,
             snapshot,
             chime,
-            outbox);
+            outbox,
+            attempts,
+            _options.Value.MaxAttempts);
 
-        var phase = BuildPhase(ring, outbox);
+        var phase = BuildPhase(ring, outbox, _options.Value.MaxAttempts);
 
         DemoOutboxStatus? outboxStatus = null;
 
@@ -217,11 +262,21 @@ public sealed class DemoSimulationService
                 recipientName = recipient.Name;
             }
 
+            var lastAttempt = attempts.Count > 0
+                ? attempts[^1]
+                : null;
+
             outboxStatus = new DemoOutboxStatus(
                 outbox.RecipientUserId.ToString(),
                 recipientName,
                 outbox.Status.ToString(),
-                outbox.AttemptCount);
+                outbox.AttemptCount,
+                lastAttempt?.Channel?.ToString(),
+                lastAttempt?.UsedFallback ?? false,
+                lastAttempt?.AttemptedAtUtc,
+                lastAttempt?.ErrorMessage,
+                Exhausted: outbox.Status == NotificationStatus.Failed
+                    && outbox.AttemptCount >= _options.Value.MaxAttempts);
         }
 
         return new DemoStatusResponse(
@@ -245,6 +300,7 @@ public sealed class DemoSimulationService
                     chime.Attempt,
                     chime.StorageKey),
             Outbox: outboxStatus,
+            AcknowledgeStatus: ring.AcknowledgeStatus.ToString(),
             ImageUrl: imageUrl,
             Phase: phase,
             RunCompleted: phase != "running",
@@ -274,9 +330,11 @@ public sealed class DemoSimulationService
                 scope.ServiceProvider.GetRequiredService<ISender>();
 
             var suffix = Guid.NewGuid().ToString("N")[..8];
+            var name = $"DoorBell Demo ({suffix})";
+            var subjectId = $"demo-user-{suffix}";
 
             var userId = await sender.Send(
-                new CreateUserCommand($"DoorBell Demo ({suffix})"),
+                new CreateUserCommand(name, SubjectId: subjectId),
                 cancellationToken);
 
             var deviceId = await sender.Send(
@@ -302,6 +360,8 @@ public sealed class DemoSimulationService
             {
                 UserId = userId,
                 DeviceId = deviceId,
+                SubjectId = subjectId,
+                Name = name,
                 CameraEntityCode = cameraCode,
                 ChimeEntityCode = chimeCode,
                 MelodyId = "demo-melody"
@@ -362,10 +422,12 @@ public sealed class DemoSimulationService
 
     private static DemoStep[] BuildSteps(
         DemoFixture fixture,
-        Doorbell.Domain.Entities.DoorbellRingEvent? ring,
-        Doorbell.Domain.Entities.DeviceCommand? snapshot,
-        Doorbell.Domain.Entities.DeviceCommand? chime,
-        Doorbell.Domain.Entities.NotificationOutbox? outbox)
+        DoorbellRingEvent? ring,
+        DeviceCommand? snapshot,
+        DeviceCommand? chime,
+        NotificationOutbox? outbox,
+        IReadOnlyList<NotificationAttempt> attempts,
+        int maxAttempts)
     {
         var steps = new List<DemoStep>
         {
@@ -438,21 +500,95 @@ public sealed class DemoSimulationService
             chimeState,
             chimeDetail));
 
-        steps.Add(new(
-            outbox is null
-                ? "Creating notification outbox row"
-                : "Notification outbox created (Pending)",
-            outbox is null ? "running" : "done",
-            outbox is null
-                ? null
-                : $"recipient {outbox.RecipientUserId} · attempts {outbox.AttemptCount}"));
+        AddNotificationSteps(steps, outbox, attempts, maxAttempts);
 
         return steps.ToArray();
     }
 
+    private static void AddNotificationSteps(
+        List<DemoStep> steps,
+        NotificationOutbox? outbox,
+        IReadOnlyList<NotificationAttempt> attempts,
+        int maxAttempts)
+    {
+        if (outbox is null)
+        {
+            steps.Add(new(
+                "Creating notification outbox row",
+                "running",
+                null));
+
+            return;
+        }
+
+        steps.Add(new(
+            "Notification created (outbox row persisted)",
+            "done",
+            $"recipient {outbox.RecipientUserId}"));
+
+        var lastAttempt = attempts.Count > 0
+            ? attempts[^1]
+            : null;
+
+        switch (outbox.Status)
+        {
+            case NotificationStatus.Pending:
+                steps.Add(new(
+                    "Notification pending processing",
+                    "running",
+                    $"waiting for the outbox processor · attempts {outbox.AttemptCount}"));
+                break;
+
+            case NotificationStatus.Processing:
+                steps.Add(new(
+                    "Dispatch in progress",
+                    "running",
+                    $"attempt {outbox.AttemptCount} · started "
+                        + (outbox.ProcessingStartedAtUtc?.ToString("O") ?? "—")));
+                break;
+
+            case NotificationStatus.Sent:
+                steps.Add(new(
+                    "Notification sent",
+                    "done",
+                    $"accepted by {FormatChannel(lastAttempt)} · attempts {outbox.AttemptCount}"));
+                break;
+
+            case NotificationStatus.Failed:
+                var exhausted = outbox.AttemptCount >= maxAttempts;
+                steps.Add(new(
+                    exhausted
+                        ? "Notification failed — retries exhausted"
+                        : "Notification failed — retry scheduled",
+                    "failed",
+                    $"attempts {outbox.AttemptCount}/{maxAttempts}"
+                        + (string.IsNullOrWhiteSpace(lastAttempt?.ErrorMessage)
+                            ? string.Empty
+                            : $" · {lastAttempt!.ErrorMessage}")));
+                break;
+        }
+    }
+
+    private static string FormatChannel(NotificationAttempt? attempt)
+    {
+        if (attempt?.Channel is null)
+        {
+            return "no channel";
+        }
+
+        var channel = attempt.Channel == NotificationChannel.Fcm
+            ? "FCM"
+            : "SignalR";
+
+        return attempt.UsedFallback
+            ? channel + " (fallback)"
+            : channel;
+    }
+
     private static string BuildPhase(
-        Doorbell.Domain.Entities.DoorbellRingEvent ring,
-        Doorbell.Domain.Entities.NotificationOutbox? outbox)
+        DoorbellRingEvent ring,
+        NotificationOutbox? outbox,
+        int maxAttempts)
     {
         var snapshotTerminal =
             ring.SnapshotStatus is SnapshotStatus.Captured
@@ -464,18 +600,30 @@ public sealed class DemoSimulationService
                 or ChimeStatus.Failed
                 or ChimeStatus.Unknown;
 
-        var failed =
+        var deviceFailed =
             ring.SnapshotStatus is SnapshotStatus.TimedOut
                 or SnapshotStatus.Failed
             || ring.ChimeStatus is ChimeStatus.Failed
                 or ChimeStatus.Unknown;
 
-        if (failed)
+        if (deviceFailed)
         {
             return "failed";
         }
 
-        return snapshotTerminal && chimeTerminal && outbox is not null
+        if (outbox is not null
+            && outbox.Status == NotificationStatus.Failed
+            && outbox.AttemptCount >= maxAttempts)
+        {
+            return "failed";
+        }
+
+        var notificationTerminal = outbox is not null
+            && (outbox.Status == NotificationStatus.Sent
+                || (outbox.Status == NotificationStatus.Failed
+                    && outbox.AttemptCount >= maxAttempts));
+
+        return snapshotTerminal && chimeTerminal && notificationTerminal
             ? "complete"
             : "running";
     }

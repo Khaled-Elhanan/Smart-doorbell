@@ -1,3 +1,6 @@
+using Doorbell.Api.Authentication;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Doorbell.Api.Demo;
 
 public static class DemoEndpoints
@@ -45,6 +48,40 @@ public static class DemoEndpoints
                         detail: ex.Message,
                         statusCode: StatusCodes.Status500InternalServerError);
                 }
+            });
+
+        endpoints.MapPost(
+            "/demo/token",
+            async Task<IResult> (
+                DemoSimulationService demo,
+                IServiceProvider services,
+                CancellationToken cancellationToken) =>
+            {
+                var issuer = services.GetService<DevelopmentTokenIssuer>();
+
+                if (issuer is null)
+                {
+                    return Results.NotFound(new
+                    {
+                        error = "Development authentication is not enabled."
+                    });
+                }
+
+                var identity = await demo.GetIdentityAsync(cancellationToken);
+
+                var (token, expiresAtUtc) = issuer.Issue(
+                    identity.SubjectId,
+                    identity.Name);
+
+                return Results.Ok(new
+                {
+                    accessToken = token,
+                    tokenType = "Bearer",
+                    expiresAtUtc,
+                    subject = identity.SubjectId,
+                    userId = identity.UserId,
+                    deviceId = identity.DeviceId
+                });
             });
 
         return endpoints;

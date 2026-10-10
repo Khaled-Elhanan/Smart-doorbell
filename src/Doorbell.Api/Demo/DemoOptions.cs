@@ -11,4 +11,6 @@ public sealed class DemoOptions
     public string SnapshotResolution { get; set; } = "640x480";
 
     public int SnapshotTimeoutSeconds { get; set; } = 8;
+
+    public int MaxAttempts { get; set; } = 3;
 }

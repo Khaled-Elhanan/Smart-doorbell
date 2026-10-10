@@ -143,8 +143,15 @@
         <span class="pill" id="snapPill">Snapshot: <b>—</b></span>
         <span class="pill" id="chimePill">Chime: <b>—</b></span>
         <span class="pill" id="outboxPill">Outbox: <b>—</b></span>
+        <span class="pill" id="signalrPill">SignalR: <b>—</b></span>
       </div>
       <div class="note" id="outboxNote"></div>
+      <div class="controls" style="margin-top:12px">
+        <button class="ghost" id="ackBtn" disabled>✅ Acknowledge ring</button>
+        <button class="ghost" id="tokenBtn">📱 Register demo FCM token</button>
+        <button class="ghost" id="clearTokenBtn">🗑️ Remove demo FCM token</button>
+      </div>
+      <div class="note" id="authNote">Connecting…</div>
       <audio id="chime" preload="auto">
         <source src="/demo/media/chime.mp3" type="audio/mpeg" />
         <source src="/demo/media/chime.wav" type="audio/wav" />
@@ -178,6 +185,7 @@
   </section>
 </div>
 
+<script src="/demo/signalr.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -195,6 +203,11 @@
   var chimePill = document.getElementById("chimePill");
   var outboxPill = document.getElementById("outboxPill");
   var outboxNote = document.getElementById("outboxNote");
+  var signalrPill = document.getElementById("signalrPill");
+  var ackBtn = document.getElementById("ackBtn");
+  var tokenBtn = document.getElementById("tokenBtn");
+  var clearTokenBtn = document.getElementById("clearTokenBtn");
+  var authNote = document.getElementById("authNote");
   var stepsEl = document.getElementById("steps");
   var imgIdle = document.getElementById("imgIdle");
   var imgLoading = document.getElementById("imgLoading");
@@ -210,6 +223,16 @@
   var timer = null;
   var imageLoadedForRun = null;
   var muted = false;
+
+  var accessToken = null;
+  var userId = null;
+  var subjectId = null;
+  var deviceId = null;
+  var signalrConnection = null;
+  var signalrState = "unavailable";
+  var signalrReceivedForRun = null;
+  var currentRingEventId = null;
+  var demoTokenValue = null;
 
   var terminalSnapshot = { "Captured": 1, "TimedOut": 1, "Failed": 1 };
 
@@ -281,16 +304,44 @@
     setPhase(status.phase);
     setPill(snapPill, "Snapshot", status.snapshotStatus);
     setPill(chimePill, "Chime", status.chimeStatus);
+    if (status.ringEventId) {
+      currentRingEventId = status.ringEventId;
+    }
     if (status.outbox) {
       setPill(outboxPill, "Outbox", status.outbox.status);
+
       var who = status.outbox.recipientName
         ? status.outbox.recipientName + " (" + status.outbox.recipientUserId + ")"
         : status.outbox.recipientUserId;
-      outboxNote.textContent = "Recipient: " + who + " · attempts: " + status.outbox.attemptCount;
+
+      var detail = "Recipient: " + who +
+        " · attempts: " + status.outbox.attemptCount;
+
+      if (status.outbox.status === "Sent" && status.outbox.lastChannel) {
+        detail += " · sent via " + status.outbox.lastChannel +
+          (status.outbox.lastUsedFallback ? " (fallback)" : "");
+      }
+      if (status.outbox.exhausted) {
+        detail += " · retries exhausted";
+      }
+      if (status.outbox.lastError) {
+        detail += " · last error: " + status.outbox.lastError;
+      }
+
+      outboxNote.textContent = detail;
     } else {
       setPill(outboxPill, "Outbox", null);
       outboxNote.textContent = "";
     }
+
+    var received = signalrReceivedForRun === currentRun;
+    setPill(signalrPill, "SignalR",
+      received ? "Received" : (signalrState === "connected" ? "Connected" : signalrState));
+
+    ackBtn.disabled = !accessToken || !currentRingEventId ||
+      status.acknowledgeStatus === "Acknowledged" ||
+      !status.eventExists;
+
     renderSteps(status.steps || []);
     if (status.imageUrl) {
       showImage(status.imageUrl);
@@ -373,6 +424,135 @@
     stepsEl.innerHTML = '<li class="running"><span class="ico">•</span><span class="label">Waiting for the ring event…</span></li>';
   }
 
+  function setAuthNote(msg, cls) {
+    authNote.textContent = msg;
+  }
+
+  function loadIdentity() {
+    return fetch("/demo/token", { method: "POST", headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        if (r.status === 404) {
+          setAuthNote("Development authentication is disabled — SignalR and acknowledgment need a real identity provider.");
+          return null;
+        }
+        if (!r.ok) throw new Error("token " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data) return;
+        accessToken = data.accessToken;
+        userId = data.userId;
+        subjectId = data.subject;
+        deviceId = data.deviceId;
+        demoTokenValue = "demo-fcm-token-" + userId;
+        setAuthNote("Authenticated as " + subjectId + ". Connecting to SignalR…");
+        connectSignalR();
+      })
+      .catch(function (e) {
+        setAuthNote("Could not obtain a demo token: " + e.message);
+      });
+  }
+
+  function connectSignalR() {
+    if (!window.signalR || !accessToken) {
+      signalrState = "unavailable";
+      setAuthNote(accessToken
+        ? "SignalR client library unavailable (offline?). Delivery will use FCM fallback if configured."
+        : authNote.textContent);
+      return;
+    }
+
+    signalrConnection = new window.signalR.HubConnectionBuilder()
+      .withUrl("/hubs/notifications", { accessTokenFactory: function () { return accessToken; } })
+      .withAutomaticReconnect()
+      .build();
+
+    signalrConnection.on("RingEventNotification", function (payload) {
+      signalrReceivedForRun = currentRun;
+      setPill(signalrPill, "SignalR", "Received");
+      setAuthNote("Live notification received for ring " + payload.ringEventId +
+        (payload.snapshotStorageKey ? " (snapshot ready)" : ""));
+      renderStepsRefresh();
+    });
+
+    signalrConnection.onreconnected(function () {
+      signalrState = "connected";
+    });
+    signalrConnection.onclose(function () {
+      signalrState = "disconnected";
+    });
+
+    signalrConnection.start()
+      .then(function () { signalrState = "connected"; })
+      .catch(function (e) {
+        signalrState = "error";
+        setAuthNote("SignalR connection failed: " + e.message);
+      });
+  }
+
+  function renderStepsRefresh() {
+    if (currentRun) {
+      if (!timer) { timer = setTimeout(poll, 200); }
+    }
+  }
+
+  function acknowledge() {
+    if (!accessToken || !currentRingEventId) return;
+    ackBtn.disabled = true;
+
+    fetch("/api/doorbells/rings/" + encodeURIComponent(currentRingEventId) + "/acknowledge", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Authorization": "Bearer " + accessToken }
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ": " + t); });
+        return r.json();
+      })
+      .then(function (data) {
+        setAuthNote(data.alreadyAcknowledged
+          ? "Ring was already acknowledged."
+          : "Ring acknowledged at " + data.acknowledgedAtUtc + ".");
+        if (currentRun && !timer) { timer = setTimeout(poll, 150); }
+      })
+      .catch(function (e) {
+        ackBtn.disabled = false;
+        setAuthNote("Acknowledgement failed: " + e.message);
+      });
+  }
+
+  function registerToken() {
+    if (!accessToken) { setAuthNote("Not authenticated."); return; }
+    fetch("/api/users/me/device-tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + accessToken
+      },
+      body: JSON.stringify({ token: demoTokenValue, platform: "demo" })
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("register " + r.status);
+        return r.json();
+      })
+      .then(function () {
+        setAuthNote("Registered FCM token for the demo user. With no active SignalR connection the " +
+          "outbox will route to FCM (and report honestly if Firebase is unconfigured).");
+      })
+      .catch(function (e) { setAuthNote("Token registration failed: " + e.message); });
+  }
+
+  function clearToken() {
+    if (!accessToken) { setAuthNote("Not authenticated."); return; }
+    fetch("/api/users/me/device-tokens?token=" + encodeURIComponent(demoTokenValue), {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + accessToken }
+    })
+      .then(function (r) {
+        setAuthNote(r.status === 204 ? "Removed the demo FCM token." : "No demo token to remove.");
+      })
+      .catch(function (e) { setAuthNote("Token removal failed: " + e.message); });
+  }
+
   function playChime() {
     if (muted) return;
     try {
@@ -420,11 +600,17 @@
     audioNote.textContent = muted ? "Muted." : "";
   });
 
+  ackBtn.addEventListener("click", acknowledge);
+  tokenBtn.addEventListener("click", registerToken);
+  clearTokenBtn.addEventListener("click", clearToken);
+
   // Initial asset banner check (uses a status call with a dummy run id).
   fetch("/demo/status?run=demo-bootstrap", { headers: { "Accept": "application/json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (s) { if (s) renderAssets(s.assets); })
     .catch(function () { /* ignore */ });
+
+  loadIdentity();
 })();
 </script>
 </body>
