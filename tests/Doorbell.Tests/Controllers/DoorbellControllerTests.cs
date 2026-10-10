@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Doorbell.Api.Controllers;
+using Doorbell.Application.Features.Doorbell.Commands.AcknowledgeRing;
 using Doorbell.Application.Features.Doorbell.Commands.OrchestrateDeviceCommands;
 using Doorbell.Application.Features.Doorbell.Commands.ReceiveRing;
 using MediatR;
@@ -94,5 +95,48 @@ public class DoorbellControllerTests
         var ringEventIdProperty = value.GetType().GetProperty("ringEventId");
         Assert.NotNull(ringEventIdProperty);
         Assert.Equal(expectedRingEventId, ringEventIdProperty.GetValue(value));
+    }
+
+    [Fact]
+    public async Task AcknowledgeRing_ReturnsAcknowledgedPayload()
+    {
+        var ringEventId = Guid.NewGuid();
+        var acknowledgedAt = DateTime.UtcNow;
+
+        _senderMock.Setup(s => s.Send(
+                It.IsAny<AcknowledgeRingCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcknowledgeRingResult(ringEventId, true, false, acknowledgedAt));
+
+        var result = await _controller.AcknowledgeRing(ringEventId, CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var value = okResult.Value!;
+        Assert.Equal(ringEventId, value.GetType().GetProperty("ringEventId")!.GetValue(value));
+        Assert.Equal(true, value.GetType().GetProperty("acknowledged")!.GetValue(value));
+        Assert.Equal(false, value.GetType().GetProperty("alreadyAcknowledged")!.GetValue(value));
+
+        _senderMock.Verify(s => s.Send(
+            It.Is<AcknowledgeRingCommand>(c => c.RingEventId == ringEventId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeRing_WhenAlreadyAcknowledged_ReportsIdempotentResult()
+    {
+        var ringEventId = Guid.NewGuid();
+        var acknowledgedAt = DateTime.UtcNow.AddMinutes(-5);
+
+        _senderMock.Setup(s => s.Send(
+                It.IsAny<AcknowledgeRingCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcknowledgeRingResult(ringEventId, true, true, acknowledgedAt));
+
+        var result = await _controller.AcknowledgeRing(ringEventId, CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var value = okResult.Value!;
+        Assert.Equal(true, value.GetType().GetProperty("acknowledged")!.GetValue(value));
+        Assert.Equal(true, value.GetType().GetProperty("alreadyAcknowledged")!.GetValue(value));
     }
 }
