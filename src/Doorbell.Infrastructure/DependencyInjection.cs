@@ -1,4 +1,4 @@
-﻿using Doorbell.Application.Abstractions.Messaging;
+using Doorbell.Application.Abstractions.Messaging;
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Abstractions.Repositories;
 using Doorbell.Application.Abstractions.Security;
@@ -7,6 +7,7 @@ using Doorbell.Infrastructure.BackgroundJobs;
 using Doorbell.Infrastructure.Messaging.Mqtt;
 using Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
 using Doorbell.Infrastructure.Messaging.Mqtt.Publishers;
+using Doorbell.Infrastructure.Messaging.Notifications;
 using Doorbell.Infrastructure.Persistence.Repositories;
 using Doorbell.Infrastructure.Security;
 using Doorbell.Infrastructure.Storage;
@@ -89,6 +90,12 @@ namespace Doorbell.Infrastructure
             services.AddHostedService<ChimeAckConsumer>();
 
             services.AddHostedService<DeviceCommandTimeoutReconciler>();
+
+            services.AddSingleton<
+                INotificationDispatchService,
+                MockNotificationDispatchService>();
+
+            services.AddHostedService<NotificationOutboxProcessorJob>();
 
             return services;
         }

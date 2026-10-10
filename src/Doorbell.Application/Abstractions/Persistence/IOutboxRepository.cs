@@ -15,5 +15,15 @@ namespace Doorbell.Application.Abstractions.Persistence
         Task<NotificationOutbox?> GetByRingEventIdAsync(
             Guid ringEventId,
             CancellationToken cancellationToken);
+
+        Task<IReadOnlyList<NotificationOutbox>> GetUnprocessedAsync(
+            int maxBatchSize,
+            int maxAttempts,
+            TimeSpan processingTimeout,
+            CancellationToken cancellationToken);
+
+        Task AddAttemptAsync(
+            NotificationAttempt attempt,
+            CancellationToken cancellationToken);
     }
 }

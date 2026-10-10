@@ -1,4 +1,4 @@
-﻿using Doorbell.Application.Abstractions.Persistence;
+using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Infrastructure.Persistence.Context;
 using System;
 using System.Collections.Generic;
@@ -15,11 +15,17 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
             _context = context;
         }
 
-        public Task<int> SaveChangesAsync(
+        public async Task<int> SaveChangesAsync(
             CancellationToken cancellationToken)
         {
-            return _context.SaveChangesAsync(
-                cancellationToken);
+            try
+            {
+                return await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
+            {
+                throw new Doorbell.Domain.Exceptions.ConcurrencyException("A concurrency conflict occurred.", ex);
+            }
         }
     }
 }

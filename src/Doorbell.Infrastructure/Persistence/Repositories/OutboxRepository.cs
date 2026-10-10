@@ -1,5 +1,6 @@
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Domain.Entities;
+using Doorbell.Domain.Enums;
 using Doorbell.Infrastructure.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +42,38 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
                 .FirstOrDefaultAsync(
                     x => x.RingEventId == ringEventId,
                     cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<NotificationOutbox>> GetUnprocessedAsync(
+            int maxBatchSize,
+            int maxAttempts,
+            TimeSpan processingTimeout,
+            CancellationToken cancellationToken)
+        {
+        
+            var cutoff = DateTime.UtcNow.Subtract(processingTimeout);
+
+            var query = _context.NotificationOutboxes
+                .Where(o => 
+                    o.Status == NotificationStatus.Pending ||
+                    (o.Status == NotificationStatus.Failed && o.AttemptCount < maxAttempts) ||
+                    (o.Status == NotificationStatus.Processing && 
+                     !_context.Set<NotificationAttempt>().Any(a => a.OutboxId == o.Id && a.AttemptedAtUtc >= cutoff) &&
+                     (o.AttemptCount > 0 || o.CreatedAtUtc < cutoff))
+                )
+                .OrderBy(o => o.CreatedAtUtc)
+                .Take(maxBatchSize);
+
+            return await query.ToListAsync(cancellationToken);
+        }
+
+        public async Task AddAttemptAsync(
+            NotificationAttempt attempt,
+            CancellationToken cancellationToken)
+        {
+            await _context.NotificationAttempts.AddAsync(
+                attempt,
+                cancellationToken);
         }
     }
 }

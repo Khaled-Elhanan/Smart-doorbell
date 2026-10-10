@@ -103,7 +103,6 @@ public sealed class DeviceCommandTimeoutReconciler : BackgroundService
             }
             catch (DbUpdateConcurrencyException ex)
             {
-                // A snapshot result or an earlier pass already changed this row.
                 _logger.LogWarning(
                     ex,
                     "Concurrent update while timing out snapshot for ring event {RingEventId}; skipped.",
