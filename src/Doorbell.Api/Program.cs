@@ -1,3 +1,4 @@
+using Doorbell.Api.Demo;
 using Doorbell.Api.Endpoints;
 using Doorbell.Application;
 using Doorbell.Infrastructure;
@@ -24,6 +25,17 @@ if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+
+    builder.Services.Configure<DemoOptions>(
+        builder.Configuration.GetSection("Demo"));
+
+    builder.Services.AddHttpClient(
+        "DemoMockDevice",
+        client => client.Timeout = TimeSpan.FromSeconds(20));
+
+    builder.Services.AddSingleton<DemoSimulationService>();
+
+    builder.Services.AddHostedService<DemoMockDeviceSimulator>();
 }
 
 var app = builder.Build();
@@ -33,6 +45,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapDemoEndpoints();
 }
 
 app.UseHttpsRedirection();
