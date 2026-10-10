@@ -17,6 +17,8 @@ namespace Doorbell.Domain.Entities
 
         public DateTime CreatedAtUtc { get; private set; }
 
+        public DateTime? ProcessingStartedAtUtc { get; private set; }
+
         public byte[] RowVersion { get; private set; } = null!;
 
         private NotificationOutbox()
@@ -59,6 +61,7 @@ namespace Doorbell.Domain.Entities
 
             Status = NotificationStatus.Processing;
             AttemptCount++;
+            ProcessingStartedAtUtc = DateTime.UtcNow;
         }
 
         public void MarkSent()
@@ -69,6 +72,7 @@ namespace Doorbell.Domain.Entities
             }
 
             Status = NotificationStatus.Sent;
+            ProcessingStartedAtUtc = null;
         }
 
         public void MarkFailed()
@@ -84,6 +88,14 @@ namespace Doorbell.Domain.Entities
             }
 
             Status = NotificationStatus.Failed;
+            ProcessingStartedAtUtc = null;
+        }
+
+        public bool IsStrandedProcessing(DateTime utcNow, TimeSpan processingTimeout)
+        {
+            return Status == NotificationStatus.Processing
+                && (ProcessingStartedAtUtc is null
+                    || ProcessingStartedAtUtc.Value < utcNow.Subtract(processingTimeout));
         }
     }
 }

@@ -226,6 +226,9 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("AttemptedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("Channel")
+                        .HasColumnType("int");
+
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -234,6 +237,9 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("Succeeded")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("UsedFallback")
                         .HasColumnType("bit");
 
                     b.HasKey("Id");
@@ -254,6 +260,9 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ProcessingStartedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid>("RecipientUserId")
@@ -311,6 +320,39 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                         .HasFilter("[SubjectId] IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("Doorbell.Domain.Entities.UserDeviceToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastSeenAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Token")
+                        .IsUnique();
+
+                    b.ToTable("UserDeviceTokens", (string)null);
                 });
 
             modelBuilder.Entity("Doorbell.Domain.Entities.AdvancedDoorbellComposition", b =>
@@ -375,6 +417,15 @@ namespace Doorbell.Infrastructure.Persistence.Migrations
                     b.HasOne("Doorbell.Domain.Entities.DoorbellRingEvent", null)
                         .WithMany()
                         .HasForeignKey("RingEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Doorbell.Domain.Entities.UserDeviceToken", b =>
+                {
+                    b.HasOne("Doorbell.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

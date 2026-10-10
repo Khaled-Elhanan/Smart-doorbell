@@ -28,6 +28,11 @@ namespace Doorbell.Infrastructure.Persistence.Configurations
             builder.Property(x => x.ErrorMessage)
                 .HasMaxLength(1000);
 
+            builder.Property(x => x.Channel);
+
+            builder.Property(x => x.UsedFallback)
+                .IsRequired();
+
             builder.HasIndex(x => new { x.OutboxId, x.AttemptNumber })
                 .IsUnique();
 

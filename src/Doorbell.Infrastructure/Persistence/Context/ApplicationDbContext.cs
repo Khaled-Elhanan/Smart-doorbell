@@ -31,6 +31,9 @@ namespace Doorbell.Infrastructure.Persistence.Context
         public DbSet<NotificationAttempt> NotificationAttempts =>
             Set<NotificationAttempt>();
 
+        public DbSet<UserDeviceToken> UserDeviceTokens =>
+            Set<UserDeviceToken>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(

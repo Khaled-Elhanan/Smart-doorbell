@@ -1,3 +1,4 @@
+using Doorbell.Domain.Enums;
 using Doorbell.Domain.Exceptions;
 
 namespace Doorbell.Domain.Entities
@@ -16,6 +17,10 @@ namespace Doorbell.Domain.Entities
 
         public string? ErrorMessage { get; private set; }
 
+        public NotificationChannel? Channel { get; private set; }
+
+        public bool UsedFallback { get; private set; }
+
         private NotificationAttempt()
         {
         }
@@ -24,7 +29,9 @@ namespace Doorbell.Domain.Entities
             Guid outboxId,
             int attemptNumber,
             bool succeeded,
-            string? errorMessage)
+            string? errorMessage,
+            NotificationChannel? channel,
+            bool usedFallback)
         {
             if (outboxId == Guid.Empty)
                 throw new DomainException("OutboxId cannot be empty.");
@@ -39,19 +46,25 @@ namespace Doorbell.Domain.Entities
             AttemptedAtUtc = DateTime.UtcNow;
             Succeeded = succeeded;
             ErrorMessage = errorMessage;
+            Channel = channel;
+            UsedFallback = usedFallback;
         }
 
         public static NotificationAttempt Create(
             Guid outboxId,
             int attemptNumber,
             bool succeeded,
-            string? errorMessage = null)
+            string? errorMessage = null,
+            NotificationChannel? channel = null,
+            bool usedFallback = false)
         {
             return new NotificationAttempt(
                 outboxId,
                 attemptNumber,
                 succeeded,
-                errorMessage);
+                errorMessage,
+                channel,
+                usedFallback);
         }
     }
 }

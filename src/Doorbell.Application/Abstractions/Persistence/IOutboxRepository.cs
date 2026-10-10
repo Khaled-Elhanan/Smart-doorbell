@@ -25,5 +25,9 @@ namespace Doorbell.Application.Abstractions.Persistence
         Task AddAttemptAsync(
             NotificationAttempt attempt,
             CancellationToken cancellationToken);
+
+        Task<IReadOnlyList<NotificationAttempt>> GetAttemptsAsync(
+            Guid outboxId,
+            CancellationToken cancellationToken);
     }
 }

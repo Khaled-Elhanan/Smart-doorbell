@@ -50,17 +50,15 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
             TimeSpan processingTimeout,
             CancellationToken cancellationToken)
         {
-        
             var cutoff = DateTime.UtcNow.Subtract(processingTimeout);
 
             var query = _context.NotificationOutboxes
-                .Where(o => 
-                    o.Status == NotificationStatus.Pending ||
-                    (o.Status == NotificationStatus.Failed && o.AttemptCount < maxAttempts) ||
-                    (o.Status == NotificationStatus.Processing && 
-                     !_context.Set<NotificationAttempt>().Any(a => a.OutboxId == o.Id && a.AttemptedAtUtc >= cutoff) &&
-                     (o.AttemptCount > 0 || o.CreatedAtUtc < cutoff))
-                )
+                .Where(o =>
+                    o.Status == NotificationStatus.Pending
+                    || (o.Status == NotificationStatus.Failed && o.AttemptCount < maxAttempts)
+                    || (o.Status == NotificationStatus.Processing
+                        && (o.ProcessingStartedAtUtc == null
+                            || o.ProcessingStartedAtUtc < cutoff)))
                 .OrderBy(o => o.CreatedAtUtc)
                 .Take(maxBatchSize);
 
@@ -74,6 +72,17 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
             await _context.NotificationAttempts.AddAsync(
                 attempt,
                 cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<NotificationAttempt>> GetAttemptsAsync(
+            Guid outboxId,
+            CancellationToken cancellationToken)
+        {
+            return await _context.NotificationAttempts
+                .AsNoTracking()
+                .Where(a => a.OutboxId == outboxId)
+                .OrderBy(a => a.AttemptNumber)
+                .ToListAsync(cancellationToken);
         }
     }
 }
