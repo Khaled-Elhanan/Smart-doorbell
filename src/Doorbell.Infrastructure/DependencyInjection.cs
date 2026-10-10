@@ -61,6 +61,10 @@ namespace Doorbell.Infrastructure
             services.AddScoped<IOutboxRepository, OutboxRepository>();
 
             services.AddScoped<
+                IUserDeviceTokenRepository,
+                UserDeviceTokenRepository>();
+
+            services.AddScoped<
                 IDeviceCommandRepository,
                 DeviceCommandRepository>();
 
@@ -91,9 +95,19 @@ namespace Doorbell.Infrastructure
 
             services.AddHostedService<DeviceCommandTimeoutReconciler>();
 
-            services.AddSingleton<
-                INotificationDispatchService,
-                MockNotificationDispatchService>();
+            services.Configure<NotificationOutboxOptions>(
+                configuration.GetSection(NotificationOutboxOptions.SectionName));
+
+            services.Configure<FirebaseMessagingOptions>(
+                configuration.GetSection(FirebaseMessagingOptions.SectionName));
+
+            services.AddSingleton<IUserConnectionRegistry, UserConnectionRegistry>();
+
+            services.AddScoped<ISignalRNotificationSender, SignalRNotificationSender>();
+
+            services.AddScoped<IFcmNotificationSender, FirebaseFcmSender>();
+
+            services.AddScoped<INotificationDispatchService, NotificationDispatchService>();
 
             services.AddHostedService<NotificationOutboxProcessorJob>();
 

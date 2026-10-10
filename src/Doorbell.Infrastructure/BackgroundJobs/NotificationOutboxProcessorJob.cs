@@ -1,35 +1,35 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Features.Notifications.Commands.ProcessNotification;
+using Doorbell.Domain.Entities;
+using Doorbell.Infrastructure.Messaging.Notifications;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Doorbell.Infrastructure.BackgroundJobs;
 
 public sealed class NotificationOutboxProcessorJob : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly NotificationOutboxOptions _options;
     private readonly ILogger<NotificationOutboxProcessorJob> _logger;
-
-    private readonly TimeSpan _interval = TimeSpan.FromSeconds(5);
-    private readonly int _maxBatchSize = 50;
-    private readonly int _maxAttempts = 3;
-    private readonly TimeSpan _processingTimeout = TimeSpan.FromMinutes(5);
 
     public NotificationOutboxProcessorJob(
         IServiceScopeFactory scopeFactory,
+        IOptions<NotificationOutboxOptions> options,
         ILogger<NotificationOutboxProcessorJob> logger)
     {
         _scopeFactory = scopeFactory;
+        _options = options.Value;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var interval = TimeSpan.FromSeconds(Math.Max(1, _options.PollingIntervalSeconds));
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -42,12 +42,12 @@ public sealed class NotificationOutboxProcessorJob : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while processing notification outbox.");
+                _logger.LogError(ex, "An error occurred while processing the notification outbox.");
             }
 
             try
             {
-                await Task.Delay(_interval, stoppingToken);
+                await Task.Delay(interval, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -58,28 +58,43 @@ public sealed class NotificationOutboxProcessorJob : BackgroundService
 
     private async Task ProcessBatchAsync(CancellationToken stoppingToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
-        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        IReadOnlyList<NotificationOutbox> candidates;
 
-        var candidates = await repository.GetUnprocessedAsync(
-            _maxBatchSize,
-            _maxAttempts,
-            _processingTimeout,
-            stoppingToken);
-
-        if (candidates.Count > 0)
+        using (var scope = _scopeFactory.CreateScope())
         {
-            _logger.LogInformation("Found {Count} notification outbox candidates.", candidates.Count);
+            var repository = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+
+            candidates = await repository.GetUnprocessedAsync(
+                _options.BatchSize,
+                _options.MaxAttempts,
+                TimeSpan.FromSeconds(Math.Max(0, _options.ProcessingTimeoutSeconds)),
+                stoppingToken);
         }
+
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Found {Count} notification outbox candidate(s).", candidates.Count);
 
         foreach (var candidate in candidates)
         {
             stoppingToken.ThrowIfCancellationRequested();
 
+            using var scope = _scopeFactory.CreateScope();
+
             try
             {
-                await sender.Send(new ProcessNotificationCommand(candidate.Id), stoppingToken);
+                var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+
+                await sender.Send(
+                    new ProcessNotificationCommand(candidate.Id),
+                    stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
