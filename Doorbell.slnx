@@ -5,4 +5,7 @@
     <Project Path="src/Doorbell.Domain/Doorbell.Domain.csproj" />
     <Project Path="src/Doorbell.Infrastructure/Doorbell.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Doorbell.Tests/Doorbell.Tests.csproj" />
+  </Folder>
 </Solution>

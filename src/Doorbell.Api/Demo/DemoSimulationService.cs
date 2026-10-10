@@ -68,7 +68,7 @@ public sealed class DemoSimulationService
     private readonly IOptions<DemoOptions> _options;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DemoSimulationService> _logger;
-    private readonly object _gate = new();
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private DemoFixture? _fixture;
 
     public DemoSimulationService(
@@ -260,66 +260,68 @@ public sealed class DemoSimulationService
             return _fixture;
         }
 
-        lock (_gate)
+        await _semaphore.WaitAsync(cancellationToken);
+        try
         {
             if (_fixture is not null)
             {
                 return _fixture;
             }
+
+            using var scope = _scopeFactory.CreateScope();
+
+            var sender =
+                scope.ServiceProvider.GetRequiredService<ISender>();
+
+            var suffix = Guid.NewGuid().ToString("N")[..8];
+
+            var userId = await sender.Send(
+                new CreateUserCommand($"DoorBell Demo ({suffix})"),
+                cancellationToken);
+
+            var deviceId = await sender.Send(
+                new CreateDeviceCommand(
+                    userId,
+                    DeviceType: "AdvancedDoorbell"),
+                cancellationToken);
+
+            var cameraCode = "demo-camera-" + suffix;
+            var chimeCode = "demo-chime-" + suffix;
+
+            await sender.Send(
+                new ConfigureDoorbellCommand(
+                    deviceId,
+                    RingButtonEntityCode: "demo-ring-" + suffix,
+                    CameraEntityCode: cameraCode,
+                    ChimeEntityCode: chimeCode,
+                    DefaultChimeMelodyId: "demo-melody",
+                    SnapshotTimeoutSeconds: _options.Value.SnapshotTimeoutSeconds),
+                cancellationToken);
+
+            var fixture = new DemoFixture
+            {
+                UserId = userId,
+                DeviceId = deviceId,
+                CameraEntityCode = cameraCode,
+                ChimeEntityCode = chimeCode,
+                MelodyId = "demo-melody"
+            };
+
+            _fixture = fixture;
+
+            _logger.LogInformation(
+                "Demo: created fixture user {UserId}, device {DeviceId}, camera {CameraCode}, chime {ChimeCode}.",
+                fixture.UserId,
+                fixture.DeviceId,
+                fixture.CameraEntityCode,
+                fixture.ChimeEntityCode);
+
+            return _fixture;
         }
-
-        using var scope = _scopeFactory.CreateScope();
-
-        var sender =
-            scope.ServiceProvider.GetRequiredService<ISender>();
-
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var userId = await sender.Send(
-            new CreateUserCommand($"DoorBell Demo ({suffix})"),
-            cancellationToken);
-
-        var deviceId = await sender.Send(
-            new CreateDeviceCommand(
-                userId,
-                DeviceType: "AdvancedDoorbell"),
-            cancellationToken);
-
-        var cameraCode = "demo-camera-" + suffix;
-        var chimeCode = "demo-chime-" + suffix;
-
-        await sender.Send(
-            new ConfigureDoorbellCommand(
-                deviceId,
-                RingButtonEntityCode: "demo-ring-" + suffix,
-                CameraEntityCode: cameraCode,
-                ChimeEntityCode: chimeCode,
-                DefaultChimeMelodyId: "demo-melody",
-                SnapshotTimeoutSeconds: _options.Value.SnapshotTimeoutSeconds),
-            cancellationToken);
-
-        var fixture = new DemoFixture
+        finally
         {
-            UserId = userId,
-            DeviceId = deviceId,
-            CameraEntityCode = cameraCode,
-            ChimeEntityCode = chimeCode,
-            MelodyId = "demo-melody"
-        };
-
-        lock (_gate)
-        {
-            _fixture ??= fixture;
+            _semaphore.Release();
         }
-
-        _logger.LogInformation(
-            "Demo: created fixture user {UserId}, device {DeviceId}, camera {CameraCode}, chime {ChimeCode}.",
-            fixture.UserId,
-            fixture.DeviceId,
-            fixture.CameraEntityCode,
-            fixture.ChimeEntityCode);
-
-        return _fixture;
     }
 
     private DemoAssetStatus BuildAssets()

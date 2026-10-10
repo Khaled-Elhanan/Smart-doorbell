@@ -49,5 +49,41 @@ namespace Doorbell.Domain.Entities
                 ringEventId,
                 recipientUserId);
         }
+
+        public void MarkProcessing()
+        {
+            if (Status == NotificationStatus.Sent)
+            {
+                throw new DomainException($"Cannot process notification '{Id}' because it has already been sent.");
+            }
+
+            Status = NotificationStatus.Processing;
+            AttemptCount++;
+        }
+
+        public void MarkSent()
+        {
+            if (Status != NotificationStatus.Processing)
+            {
+                throw new DomainException($"Cannot mark notification '{Id}' as sent because it is in status {Status}.");
+            }
+
+            Status = NotificationStatus.Sent;
+        }
+
+        public void MarkFailed()
+        {
+            if (Status == NotificationStatus.Sent)
+            {
+                throw new DomainException($"Cannot mark notification '{Id}' as failed because it has already been sent.");
+            }
+
+            if (Status != NotificationStatus.Processing)
+            {
+                throw new DomainException($"Cannot mark notification '{Id}' as failed because it is not currently processing.");
+            }
+
+            Status = NotificationStatus.Failed;
+        }
     }
 }

@@ -1,5 +1,7 @@
-﻿using Doorbell.Application.Features.Devices.Commands.ConfigureDoorbell;
+using Doorbell.Application.Features.Devices.Commands.ConfigureDoorbell;
 using Doorbell.Application.Features.Doorbell.Commands.ReceiveRing;
+using Doorbell.Application.Features.Doorbell.Commands.OrchestrateDeviceCommands;
+using Microsoft.EntityFrameworkCore;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,10 +35,24 @@ public sealed class DoorbellController : ControllerBase
         ReceiveRingCommand command,
         CancellationToken cancellationToken)
     {
-        var ringEventId = await _sender.Send(
+        var result = await _sender.Send(
             command,
             cancellationToken);
 
-        return Ok(new { ringEventId });
+        if (result.IsNew)
+        {
+            try
+            {
+                await _sender.Send(
+                    new OrchestrateDeviceCommandsCommand(result.RingEventId),
+                    cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // A concurrent delivery recorded the same intent first.
+            }
+        }
+
+        return Ok(new { ringEventId = result.RingEventId });
     }
 }
