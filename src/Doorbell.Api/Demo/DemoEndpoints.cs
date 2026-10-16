@@ -1,10 +1,22 @@
-using Doorbell.Api.Authentication;
-using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Doorbell.Api.Demo;
 
+public sealed record DemoStartRequest
+{
+    public string? Mode { get; init; }
+}
+
 public static class DemoEndpoints
 {
+    private static readonly JsonSerializerOptions StartRequestJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     public static IEndpointRouteBuilder MapDemoEndpoints(
         this IEndpointRouteBuilder endpoints)
     {
@@ -31,15 +43,32 @@ public static class DemoEndpoints
         endpoints.MapPost(
             "/demo/simulate",
             async Task<IResult> (
+                HttpRequest httpRequest,
                 DemoSimulationService demo,
                 CancellationToken cancellationToken) =>
             {
                 try
                 {
-                    var runId = await demo.StartRingAsync(
+                    var request = await ReadStartRequestAsync(
+                        httpRequest,
                         cancellationToken);
 
-                    return Results.Ok(new { runId });
+                    var mode = string.Equals(
+                        request?.Mode,
+                        "interactive",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? DemoMode.Interactive
+                        : DemoMode.Auto;
+
+                    var runId = await demo.StartRingAsync(
+                        mode,
+                        cancellationToken);
+
+                    return Results.Ok(new
+                    {
+                        runId,
+                        mode = mode.ToString()
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -50,40 +79,90 @@ public static class DemoEndpoints
                 }
             });
 
+        endpoints.MapGet(
+            "/demo/runs",
+            (DemoSimulationService demo) =>
+            {
+                return Results.Ok(new { runs = demo.GetRecentRuns() });
+            });
+
         endpoints.MapPost(
-            "/demo/token",
+            "/demo/runs/{runId}/acknowledge",
             async Task<IResult> (
+                string runId,
                 DemoSimulationService demo,
-                IServiceProvider services,
                 CancellationToken cancellationToken) =>
             {
-                var issuer = services.GetService<DevelopmentTokenIssuer>();
-
-                if (issuer is null)
+                try
                 {
-                    return Results.NotFound(new
-                    {
-                        error = "Development authentication is not enabled."
-                    });
+                    var result = await demo.AcknowledgeRunAsync(
+                        runId,
+                        cancellationToken);
+
+                    return Results.Ok(result);
                 }
-
-                var identity = await demo.GetIdentityAsync(cancellationToken);
-
-                var (token, expiresAtUtc) = issuer.Issue(
-                    identity.SubjectId,
-                    identity.Name);
-
-                return Results.Ok(new
+                catch (InvalidOperationException ex)
                 {
-                    accessToken = token,
-                    tokenType = "Bearer",
-                    expiresAtUtc,
-                    subject = identity.SubjectId,
-                    userId = identity.UserId,
-                    deviceId = identity.DeviceId
-                });
+                    return Results.NotFound(new { error = ex.Message });
+                }
+            });
+
+        endpoints.MapPost(
+            "/demo/runs/{runId}/reject",
+            async Task<IResult> (
+                string runId,
+                DemoSimulationService demo,
+                CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var result = await demo.RejectRunAsync(
+                        runId,
+                        cancellationToken);
+
+                    return Results.Ok(result);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.NotFound(new { error = ex.Message });
+                }
             });
 
         return endpoints;
+    }
+
+    private static async Task<DemoStartRequest?> ReadStartRequestAsync(
+        HttpRequest httpRequest,
+        CancellationToken cancellationToken)
+    {
+        if (httpRequest.ContentLength is null or 0
+            && !httpRequest.Headers.ContainsKey("Transfer-Encoding"))
+        {
+            return null;
+        }
+
+        httpRequest.EnableBuffering();
+
+        using var reader = new StreamReader(
+            httpRequest.Body,
+            leaveOpen: true);
+
+        var body = await reader.ReadToEndAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<DemoStartRequest>(
+                body,
+                StartRequestJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }

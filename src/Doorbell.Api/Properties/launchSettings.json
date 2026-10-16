@@ -8,17 +8,19 @@
       "launchUrl": "swagger/index.html",
       "applicationUrl": "http://localhost:5260",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ObjectStorage__PublicBaseUrl": "http://localhost:5260"
       }
     },
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "launchUrl": "demo/",
-      "applicationUrl": "https://localhost:5260",
+      "launchUrl": "swagger/index.html",
+      "applicationUrl": "https://localhost:7101",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ObjectStorage__PublicBaseUrl": "https://localhost:7101"
       }
     }
   }

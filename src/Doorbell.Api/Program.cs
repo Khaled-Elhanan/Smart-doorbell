@@ -1,4 +1,3 @@
-using Doorbell.Api.Authentication;
 using Doorbell.Api.Demo;
 using Doorbell.Api.Endpoints;
 using Doorbell.Application;
@@ -23,11 +22,8 @@ builder.Services.AddControllers();
 
 builder.Services.AddSignalR();
 
-builder.Services.AddDoorbellAuthentication(
-    builder.Configuration,
-    builder.Environment);
-
 builder.Services.AddExceptionHandler<Doorbell.Api.ExceptionHandling.GlobalExceptionHandler>();
+
 builder.Services.AddProblemDetails();
 
 builder.Services.AddOpenApi();
@@ -42,9 +38,17 @@ if (builder.Environment.IsDevelopment())
 
     builder.Services.AddHttpClient(
         "DemoMockDevice",
-        client => client.Timeout = TimeSpan.FromSeconds(20));
+        client => client.Timeout = TimeSpan.FromSeconds(20))
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (request, _, _, errors) =>
+                request.RequestUri?.Host is "localhost" or "127.0.0.1"
+                || errors == System.Net.Security.SslPolicyErrors.None
+        });
 
     builder.Services.AddSingleton<DemoSimulationService>();
+
+    builder.Services.AddSingleton<DemoRunStore>();
 
     builder.Services.AddHostedService<DemoMockDeviceSimulator>();
 }
@@ -64,10 +68,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-app.UseAuthentication();
-
-app.UseAuthorization();
 
 app.MapObjectStorageEndpoints();
 

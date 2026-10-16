@@ -46,10 +46,26 @@ public static class ObjectStorageEndpoints
                     ? Results.NotFound()
                     : Results.Stream(
                         stream,
-                        "application/octet-stream");
+                        ResolveContentType(storageKey));
             });
 
         return endpoints;
+    }
+
+    private static string ResolveContentType(string storageKey)
+    {
+        return Path.GetExtension(storageKey).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".wav" => "audio/wav",
+            ".mp3" => "audio/mpeg",
+            ".json" => "application/json",
+            ".mp4" => "video/mp4",
+            _ => "application/octet-stream"
+        };
     }
 
     private static bool IsAuthorized(

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DoorBell — Interactive Local Demo</title>
+<title>DoorBell &mdash; Live Architecture Demo</title>
 <style>
   :root {
     --bg: #0f172a;
@@ -35,7 +35,7 @@
     color: var(--muted); background: var(--panel);
   }
   .badge.dev { color: var(--accent); border-color: #0e7490; background: #082f49; }
-  .subtitle { color: var(--muted); margin: 0 0 22px; font-size: .92rem; }
+  .subtitle { color: var(--muted); margin: 0 0 22px; font-size: .92rem; line-height: 1.55; }
   .banner {
     display: none; margin: 0 0 18px; padding: 12px 14px; border-radius: 10px;
     border: 1px solid #92400e; background: #431407; color: #fed7aa; font-size: .88rem;
@@ -64,6 +64,9 @@
     border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: .85rem;
   }
   button.ghost:hover { border-color: var(--accent); }
+  button.ghost:disabled { opacity: .45; cursor: not-allowed; border-color: var(--border); }
+  button.ghost.primary { border-color: #0e7490; background: #082f49; color: #bae6fd; }
+  button.ghost.danger:hover { border-color: var(--err); color: #fca5a5; }
   .runline { margin-top: 14px; color: var(--muted); font-size: .82rem; word-break: break-all; }
   .phase {
     display: inline-flex; align-items: center; gap: 8px; font-weight: 600;
@@ -74,6 +77,8 @@
   .dot.running { background: var(--accent); animation: pulse 1s infinite; }
   .dot.complete { background: var(--ok); }
   .dot.failed { background: var(--err); }
+  .dot.pending-ack { background: var(--warn); animation: pulse 1s infinite; }
+  .dot.cancelled { background: var(--muted); }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
   .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .pill {
@@ -84,15 +89,6 @@
   .pill.ok { border-color: #166534; background: #052e16; color: #86efac; }
   .pill.warn { border-color: #92400e; background: #431407; color: #fdba74; }
   .pill.err { border-color: #991b1b; background: #450a0a; color: #fca5a5; }
-  .steps { list-style: none; margin: 0; padding: 0; }
-  .steps li { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: .87rem; }
-  .steps li:last-child { border-bottom: 0; }
-  .ico { width: 18px; text-align: center; flex: 0 0 18px; }
-  .steps .done .ico { color: var(--ok); }
-  .steps .running .ico { color: var(--accent); }
-  .steps .failed .ico { color: var(--err); }
-  .steps .label { flex: 1; }
-  .steps .detail { color: var(--muted); font-size: .78rem; margin-top: 2px; word-break: break-all; }
   .imgbox {
     min-height: 260px; border-radius: 12px; border: 1px dashed var(--border);
     background: #0b1220; display: flex; align-items: center; justify-content: center;
@@ -105,12 +101,98 @@
     border-top-color: var(--accent); animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .imgstate { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .imgstate { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 14px; text-align: center; }
   .hidden { display: none !important; }
   .kv { display: flex; justify-content: space-between; gap: 12px; font-size: .83rem; padding: 5px 0; color: var(--muted); }
   .kv b { color: var(--text); font-weight: 600; text-align: right; word-break: break-all; }
-  .note { font-size: .78rem; color: var(--muted); margin-top: 10px; }
+  .note { font-size: .78rem; color: var(--muted); margin-top: 10px; line-height: 1.5; }
   .err-text { color: #fca5a5; font-size: .85rem; margin-top: 10px; word-break: break-word; }
+  .section-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+  .section-label:first-of-type { margin-top: 0; }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; cursor: pointer; background: var(--panel-2); color: var(--muted);
+    padding: 9px 16px; font-size: .85rem; font-weight: 600;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.active { background: #082f49; color: #bae6fd; }
+  .seg.wide { display: flex; width: 100%; }
+  .seg.wide button { flex: 1; padding: 11px 12px; font-size: .82rem; line-height: 1.4; }
+  .seg.wide button.active.online { background: #052e16; color: #86efac; border-color: #166534; }
+  .seg.wide button.active.offline { background: #431407; color: #fdba74; }
+
+  .snap-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  a.btnlink {
+    display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+    color: var(--text); background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 13px; font-size: .84rem; cursor: pointer;
+  }
+  a.btnlink:hover { border-color: var(--accent); }
+  a.btnlink.disabled { opacity: .45; pointer-events: none; }
+
+  .tl { list-style: none; margin: 0; padding: 0; }
+  .tl-item { border-bottom: 1px dashed var(--border); padding: 10px 0; }
+  .tl-item:last-child { border-bottom: 0; }
+  .tl-head { display: flex; align-items: flex-start; gap: 10px; }
+  .tl-ico { flex: 0 0 18px; width: 18px; text-align: center; margin-top: 1px; }
+  .tl-item.done .tl-ico { color: var(--ok); }
+  .tl-item.running .tl-ico { color: var(--accent); }
+  .tl-item.pending .tl-ico { color: var(--warn); }
+  .tl-item.failed .tl-ico { color: var(--err); }
+  .tl-item.cancelled .tl-ico { color: var(--muted); }
+  .tl-item.skipped .tl-ico { color: var(--muted); }
+  .tl-item.skipped .tl-label { color: var(--muted); }
+  .tl-main { flex: 1; min-width: 0; }
+  .tl-label { font-size: .88rem; }
+  .tl-meta { color: var(--muted); font-size: .74rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .tl-meta .mono { font-variant-numeric: tabular-nums; }
+
+  .history { display: flex; flex-direction: column; gap: 8px; }
+  .history-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--panel-2); cursor: pointer; font-size: .83rem;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-item.active { border-color: var(--accent); background: #082f49; }
+  .history-item .rid { font-family: "Cascadia Mono", Consolas, monospace; }
+  .history-item .spacer { flex: 1; }
+  .tag { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .tag.auto { color: #bae6fd; border-color: #0e7490; }
+  .tag.interactive { color: #fdba74; border-color: #92400e; }
+  .tag.complete { color: #86efac; border-color: #166534; }
+  .tag.failed, .tag.cancelled { color: #fca5a5; border-color: #991b1b; }
+  .tag.pending-ack { color: #fdba74; border-color: #92400e; }
+
+  .toast-wrap { position: fixed; top: 18px; right: 18px; z-index: 50; display: flex; flex-direction: column; gap: 12px; width: 360px; max-width: calc(100vw - 36px); }
+  .toast {
+    background: linear-gradient(180deg, #1e293b 0%, #0b1220 100%);
+    border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 12px; padding: 14px; box-shadow: 0 18px 40px rgba(0,0,0,.5);
+    animation: slidein .25s ease-out;
+  }
+  .toast.signalr { border-left-color: var(--accent); }
+  .toast.fcm { border-left-color: var(--ok); box-shadow: 0 18px 40px rgba(0,0,0,.6); }
+  @keyframes slidein { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .toast .t-app { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+  .toast .t-appicon {
+    width: 28px; height: 28px; border-radius: 8px; flex: 0 0 28px;
+    background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: #04121f;
+  }
+  .toast .t-appname { font-weight: 700; font-size: .82rem; }
+  .toast .t-source { margin-left: auto; font-size: .64rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); text-align: right; }
+  .toast.fcm .t-source { color: var(--ok); }
+  .toast .t-title { font-weight: 700; font-size: .92rem; margin-bottom: 6px; }
+  .toast .t-body { font-size: .82rem; color: var(--muted); line-height: 1.55; }
+  .toast .t-body b { color: var(--text); }
+  .toast .t-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .toast .t-actions button { flex: 1; min-width: 110px; }
+
+  .modal { position: fixed; inset: 0; z-index: 60; background: rgba(2,6,23,.86); display: none; align-items: center; justify-content: center; padding: 24px; }
+  .modal.show { display: flex; }
+  .modal img { max-width: 100%; max-height: 88vh; border-radius: 12px; border: 1px solid var(--border); }
+  .modal .close { position: absolute; top: 18px; right: 22px; font-size: 1.6rem; color: var(--text); cursor: pointer; background: none; border: 0; }
 </style>
 </head>
 <body>
@@ -118,11 +200,14 @@
   <header>
     <h1>DoorBell</h1>
     <span class="badge dev">Development only</span>
-    <span class="badge" id="envBadge">local</span>
+    <a href="/swagger/index.html" target="_blank" rel="noopener"
+       style="margin-left:auto;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;padding:4px 9px;border-radius:999px;border:1px solid var(--border);color:var(--accent);text-decoration:none;"
+       title="Open the API documentation (Swagger)">API docs &#8599;</a>
   </header>
   <p class="subtitle">
-    Click <b>Ring Doorbell</b> to publish a real ring to the local Mosquitto broker. The real
-    consumers, orchestration, signed upload and result handling run end-to-end.
+    Publish a real ring to the local Mosquitto broker and watch the real consumers, chime, signed upload,
+    transactional outbox and notification fan-out run end-to-end. Flip the delivery channel to see the same
+    pipeline route live over SignalR or fall back to the simulated FCM push sender.
   </p>
 
   <div class="banner" id="assetsBanner"></div>
@@ -130,9 +215,23 @@
   <div class="grid">
     <section class="card">
       <h2>Simulation</h2>
-      <div class="controls">
-        <button class="ring" id="ringBtn">🔔 Ring Doorbell</button>
-        <button class="ghost" id="muteBtn" title="Mute/unmute the chime">🔊 Sound on</button>
+
+      <div class="section-label">Delivery channel &mdash; SignalR vs. FCM fallback</div>
+      <div class="seg wide" id="channelSeg">
+        <button type="button" data-delivery="online" class="active online">SignalR: Connected (Online)</button>
+        <button type="button" data-delivery="offline" class="offline">SignalR: Disconnected (Offline - Fallback to FCM)</button>
+      </div>
+      <div class="note" id="deliveryNote">Connecting&hellip;</div>
+
+      <div class="section-label">Execution mode</div>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-mode="auto" class="active">Auto (end-to-end)</button>
+        <button type="button" data-mode="interactive">Interactive (manual ack)</button>
+      </div>
+
+      <div class="controls" style="margin-top:16px">
+        <button class="ring" id="ringBtn">&#128276; Ring Doorbell</button>
+        <button class="ghost" id="muteBtn" title="Mute/unmute the chime">&#128266; Sound on</button>
       </div>
       <div class="runline" id="runLine">No run yet.</div>
       <div class="err-text hidden" id="errorText"></div>
@@ -140,20 +239,21 @@
         <span class="phase" id="phase"><span class="dot" id="phaseDot"></span><span id="phaseText">Idle</span></span>
       </div>
       <div class="pills">
-        <span class="pill" id="snapPill">Snapshot: <b>—</b></span>
-        <span class="pill" id="chimePill">Chime: <b>—</b></span>
-        <span class="pill" id="outboxPill">Outbox: <b>—</b></span>
-        <span class="pill" id="signalrPill">SignalR: <b>—</b></span>
+        <span class="pill" id="snapPill">Snapshot: <b>&mdash;</b></span>
+        <span class="pill" id="chimePill">Chime: <b>&mdash;</b></span>
+        <span class="pill" id="outboxPill">Outbox: <b>&mdash;</b></span>
+        <span class="pill" id="channelPill">Channel: <b>&mdash;</b></span>
       </div>
       <div class="note" id="outboxNote"></div>
-      <div class="controls" style="margin-top:12px">
-        <button class="ghost" id="ackBtn" disabled>✅ Acknowledge ring</button>
-        <button class="ghost" id="tokenBtn">📱 Register demo FCM token</button>
-        <button class="ghost" id="clearTokenBtn">🗑️ Remove demo FCM token</button>
+
+      <div class="section-label">Interactive actions</div>
+      <div class="controls">
+        <button class="ghost primary" id="ackBtn" disabled>&#9989; Acknowledge &amp; Load Snapshot</button>
+        <button class="ghost danger" id="rejectBtn" disabled>&#10060; Reject / Ignore Ring</button>
       </div>
-      <div class="note" id="authNote">Connecting…</div>
+      <div class="note" id="ackNote">Interactive mode stops the pipeline after the ring notification and waits for your acknowledgment.</div>
+
       <audio id="chime" preload="auto">
-        <source src="/demo/media/chime.mp3" type="audio/mpeg" />
         <source src="/demo/media/chime.wav" type="audio/wav" />
       </audio>
       <div class="note" id="audioNote"></div>
@@ -163,26 +263,47 @@
       <h2>Snapshot</h2>
       <div class="imgbox" id="imgBox">
         <div class="imgstate" id="imgIdle">
-          <span style="font-size:1.6rem">🖼️</span>
-          <span>No snapshot yet — ring the doorbell.</span>
+          <span style="font-size:1.6rem">&#128444;</span>
+          <span>No snapshot yet &mdash; ring the doorbell.</span>
         </div>
         <div class="imgstate hidden" id="imgLoading">
           <div class="spinner"></div>
-          <span>Waiting for the camera upload…</span>
+          <span id="imgLoadingText">Waiting for the camera upload&hellip;</span>
         </div>
         <img id="snapshotImg" alt="Doorbell snapshot" />
       </div>
-      <div class="kv"><span>Storage key</span><b id="storageKey">—</b></div>
-      <div class="kv"><span>Resolution</span><b id="resolution">—</b></div>
+      <div class="snap-actions">
+        <a class="btnlink disabled" id="downloadBtn" href="#" download>&#11015; Download Snapshot</a>
+        <a class="btnlink disabled" id="fullscreenBtn" href="#">&#128269; View Fullscreen</a>
+      </div>
+      <div class="kv"><span>Storage key</span><b id="storageKey">&mdash;</b></div>
+      <div class="kv"><span>Resolution</span><b id="resolution">&mdash;</b></div>
+      <div class="kv"><span>File size</span><b id="fileSize">&mdash;</b></div>
+      <div class="kv"><span>MIME type</span><b id="mimeType">&mdash;</b></div>
+      <div class="kv"><span>Capture timestamp</span><b id="capturedAt">&mdash;</b></div>
     </section>
   </div>
 
   <section class="card" style="margin-top:18px">
-    <h2>Timeline</h2>
-    <ol class="steps" id="steps">
-      <li class="running"><span class="ico">•</span><span class="label">Waiting for a run…</span></li>
+    <h2>Live timeline</h2>
+    <ol class="tl" id="timeline">
+      <li class="tl-item running"><div class="tl-head"><span class="tl-ico">&#9679;</span><div class="tl-main"><div class="tl-label">Waiting for a run&hellip;</div></div></div></li>
     </ol>
   </section>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Recent runs</h2>
+    <div class="history" id="history">
+      <div class="note">No runs yet.</div>
+    </div>
+  </section>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="modal" id="snapshotModal">
+  <button class="close" id="modalClose" title="Close">&times;</button>
+  <img id="modalImg" alt="Doorbell snapshot (fullscreen)" />
 </div>
 
 <script src="/demo/signalr.min.js"></script>
@@ -190,51 +311,91 @@
 (function () {
   "use strict";
 
-  var POLL_MS = 750;
-  var MAX_POLLS = 45; // ~34s, covers snapshot timeout + reconcile
+  var POLL_MS = 800;
+  var MAX_POLLS = 1500;
 
-  var ringBtn = document.getElementById("ringBtn");
-  var muteBtn = document.getElementById("muteBtn");
-  var runLine = document.getElementById("runLine");
-  var errorText = document.getElementById("errorText");
-  var phaseDot = document.getElementById("phaseDot");
-  var phaseText = document.getElementById("phaseText");
-  var snapPill = document.getElementById("snapPill");
-  var chimePill = document.getElementById("chimePill");
-  var outboxPill = document.getElementById("outboxPill");
-  var outboxNote = document.getElementById("outboxNote");
-  var signalrPill = document.getElementById("signalrPill");
-  var ackBtn = document.getElementById("ackBtn");
-  var tokenBtn = document.getElementById("tokenBtn");
-  var clearTokenBtn = document.getElementById("clearTokenBtn");
-  var authNote = document.getElementById("authNote");
-  var stepsEl = document.getElementById("steps");
-  var imgIdle = document.getElementById("imgIdle");
-  var imgLoading = document.getElementById("imgLoading");
-  var snapshotImg = document.getElementById("snapshotImg");
-  var storageKeyEl = document.getElementById("storageKey");
-  var resolutionEl = document.getElementById("resolution");
-  var audioNote = document.getElementById("audioNote");
-  var assetsBanner = document.getElementById("assetsBanner");
-  var chime = document.getElementById("chime");
+  var $ = function (id) { return document.getElementById(id); };
 
+  var ringBtn = $("ringBtn");
+  var muteBtn = $("muteBtn");
+  var runLine = $("runLine");
+  var errorText = $("errorText");
+  var phaseDot = $("phaseDot");
+  var phaseText = $("phaseText");
+  var snapPill = $("snapPill");
+  var chimePill = $("chimePill");
+  var outboxPill = $("outboxPill");
+  var channelPill = $("channelPill");
+  var outboxNote = $("outboxNote");
+  var ackBtn = $("ackBtn");
+  var rejectBtn = $("rejectBtn");
+  var ackNote = $("ackNote");
+  var timelineEl = $("timeline");
+  var imgIdle = $("imgIdle");
+  var imgLoading = $("imgLoading");
+  var imgLoadingText = $("imgLoadingText");
+  var snapshotImg = $("snapshotImg");
+  var storageKeyEl = $("storageKey");
+  var resolutionEl = $("resolution");
+  var fileSizeEl = $("fileSize");
+  var mimeTypeEl = $("mimeType");
+  var capturedAtEl = $("capturedAt");
+  var downloadBtn = $("downloadBtn");
+  var fullscreenBtn = $("fullscreenBtn");
+  var audioNote = $("audioNote");
+  var assetsBanner = $("assetsBanner");
+  var chime = $("chime");
+  var modeSeg = $("modeSeg");
+  var channelSeg = $("channelSeg");
+  var deliveryNote = $("deliveryNote");
+  var historyEl = $("history");
+  var toastWrap = $("toastWrap");
+  var snapshotModal = $("snapshotModal");
+  var modalImg = $("modalImg");
+  var modalClose = $("modalClose");
+
+  var mode = "auto";
   var currentRun = null;
   var polls = 0;
   var timer = null;
   var imageLoadedForRun = null;
   var muted = false;
+  var currentStatus = null;
 
-  var accessToken = null;
-  var userId = null;
-  var subjectId = null;
-  var deviceId = null;
   var signalrConnection = null;
-  var signalrState = "unavailable";
-  var signalrReceivedForRun = null;
-  var currentRingEventId = null;
-  var demoTokenValue = null;
+  var signalrState = "connecting";
+  var shownRingAlertForRun = null;
+  var shownSnapshotForRun = null;
 
-  var terminalSnapshot = { "Captured": 1, "TimedOut": 1, "Failed": 1 };
+  var PHASE_TEXT = {
+    idle: "Idle",
+    running: "In progress\u2026",
+    "pending-ack": "Waiting for Acknowledgment",
+    complete: "Complete \u2713",
+    failed: "Failed \u2717",
+    cancelled: "Ignored / Cancelled"
+  };
+
+  var ICONS = {
+    done: "\u2713",
+    running: "\u25CF",
+    pending: "\u23F3",
+    failed: "\u2717",
+    cancelled: "\u2298",
+    skipped: "\u2298"
+  };
+
+  var STATUS_TEXT = {
+    Requested: "Pending",
+    Pending: "Pending",
+    Processing: "Delivering",
+    Sent: "Delivered",
+    Captured: "Captured",
+    Played: "Played",
+    TimedOut: "Timed out",
+    Failed: "Failed",
+    Unknown: "Unknown"
+  };
 
   function setError(msg) {
     if (!msg) { errorText.classList.add("hidden"); errorText.textContent = ""; return; }
@@ -244,8 +405,7 @@
 
   function setPhase(phase) {
     phaseDot.className = "dot " + (phase || "");
-    var text = { running: "In progress…", complete: "Complete ✓", failed: "Failed ✗", idle: "Idle" }[phase] || "Idle";
-    phaseText.textContent = text;
+    phaseText.textContent = PHASE_TEXT[phase] || "Idle";
   }
 
   function pillClass(status) {
@@ -256,33 +416,116 @@
     return "pill";
   }
 
-  function setPill(el, label, value) {
-    el.className = pillClass(value);
-    el.innerHTML = label + ": <b>" + (value || "—") + "</b>";
+  function setPill(el, label, status) {
+    el.className = pillClass(status);
+    var text = status ? (STATUS_TEXT[status] || status) : "\u2014";
+    el.innerHTML = label + ": <b>" + text + "</b>";
   }
 
-  function renderSteps(steps) {
-    stepsEl.innerHTML = "";
-    var icons = { done: "✓", running: "•", failed: "✗" };
-    steps.forEach(function (s) {
+  function setChannelPill(notification) {
+    if (!notification || !notification.lastChannel) {
+      setPill(channelPill, "Channel", null);
+      return;
+    }
+    channelPill.className = "pill " + (notification.lastUsedFallback ? "warn" : "ok");
+    channelPill.innerHTML = "Channel: <b>" +
+      channelLabel(notification.lastChannel, notification.lastUsedFallback) + "</b>";
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "\u2014";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleTimeString() + "." + ("00" + d.getMilliseconds()).slice(-3);
+  }
+
+  function fmtDuration(ms) {
+    if (ms === null || ms === undefined) return null;
+    if (ms < 1000) return ms + " ms";
+    return (ms / 1000).toFixed(2) + " s";
+  }
+
+  function fmtBytes(n) {
+    if (n === null || n === undefined) return "\u2014";
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function channelLabel(channel, fallback) {
+    if (!channel) return "\u2014";
+    var base = channel === "Fcm" ? "FCM" : channel;
+    return fallback ? base + " (Fallback)" : base;
+  }
+
+  function renderTimeline(events) {
+    timelineEl.innerHTML = "";
+
+    if (!events || !events.length) {
+      var empty = document.createElement("li");
+      empty.className = "tl-item running";
+      empty.innerHTML = '<div class="tl-head"><span class="tl-ico">' + ICONS.running +
+        '</span><div class="tl-main"><div class="tl-label">Waiting for a run\u2026</div></div></div>';
+      timelineEl.appendChild(empty);
+      return;
+    }
+
+    events.forEach(function (ev) {
       var li = document.createElement("li");
-      li.className = s.state || "running";
+      li.className = "tl-item " + (ev.state || "running");
+
+      var head = document.createElement("div");
+      head.className = "tl-head";
+
       var ico = document.createElement("span");
-      ico.className = "ico";
-      ico.textContent = icons[s.state] || "•";
-      var body = document.createElement("span");
-      body.className = "label";
-      body.textContent = s.label;
-      if (s.detail) {
-        var d = document.createElement("div");
-        d.className = "detail";
-        d.textContent = s.detail;
-        body.appendChild(d);
-      }
-      li.appendChild(ico);
-      li.appendChild(body);
-      stepsEl.appendChild(li);
+      ico.className = "tl-ico";
+      ico.textContent = ICONS[ev.state] || "\u25CF";
+
+      var main = document.createElement("div");
+      main.className = "tl-main";
+
+      var label = document.createElement("div");
+      label.className = "tl-label";
+      label.textContent = ev.label;
+      main.appendChild(label);
+
+      var meta = document.createElement("div");
+      meta.className = "tl-meta";
+      var bits = [];
+      if (ev.atUtc) bits.push('<span class="mono">' + fmtTime(ev.atUtc) + "</span>");
+      var dur = fmtDuration(ev.durationMs);
+      if (dur) bits.push("<span>" + dur + "</span>");
+      if (ev.detail) bits.push("<span>" + ev.detail + "</span>");
+      if (!ev.atUtc && ev.state === "running") bits.push("<span>pending\u2026</span>");
+      meta.innerHTML = bits.join("");
+      main.appendChild(meta);
+
+      head.appendChild(ico);
+      head.appendChild(main);
+      li.appendChild(head);
+      timelineEl.appendChild(li);
     });
+  }
+
+  function renderSnapshotMeta(meta, status) {
+    meta = meta || {};
+    storageKeyEl.textContent = meta.storageKey || (status.snapshotCommand ? status.snapshotCommand.storageKey : null) || "\u2014";
+    resolutionEl.textContent = meta.resolution || "\u2014";
+    fileSizeEl.textContent = fmtBytes(meta.sizeBytes);
+    mimeTypeEl.textContent = meta.mimeType || "\u2014";
+    capturedAtEl.textContent = meta.capturedAtUtc ? fmtTime(meta.capturedAtUtc) : "\u2014";
+  }
+
+  function updateSnapActions(url) {
+    if (url) {
+      downloadBtn.href = url;
+      downloadBtn.classList.remove("disabled");
+      fullscreenBtn.classList.remove("disabled");
+    } else {
+      downloadBtn.href = "#";
+      downloadBtn.classList.add("disabled");
+      fullscreenBtn.classList.add("disabled");
+    }
   }
 
   function showImage(url) {
@@ -301,59 +544,80 @@
   }
 
   function render(status) {
+    currentStatus = status;
+    mode = (status.mode || "auto").toLowerCase();
+
     setPhase(status.phase);
-    setPill(snapPill, "Snapshot", status.snapshotStatus);
-    setPill(chimePill, "Chime", status.chimeStatus);
-    if (status.ringEventId) {
-      currentRingEventId = status.ringEventId;
-    }
-    if (status.outbox) {
-      setPill(outboxPill, "Outbox", status.outbox.status);
+    setPill(snapPill, "Snapshot", status.eventExists ? status.snapshotStatus : null);
+    setPill(chimePill, "Chime", status.eventExists ? status.chimeStatus : null);
 
-      var who = status.outbox.recipientName
-        ? status.outbox.recipientName + " (" + status.outbox.recipientUserId + ")"
-        : status.outbox.recipientUserId;
+    var notification = status.notification;
 
-      var detail = "Recipient: " + who +
-        " · attempts: " + status.outbox.attemptCount;
+    if (notification) {
+      setPill(outboxPill, "Outbox", notification.status);
 
-      if (status.outbox.status === "Sent" && status.outbox.lastChannel) {
-        detail += " · sent via " + status.outbox.lastChannel +
-          (status.outbox.lastUsedFallback ? " (fallback)" : "");
+      var who = notification.recipientName
+        ? notification.recipientName + " (" + notification.recipientUserId + ")"
+        : notification.recipientUserId;
+
+      var detail = "Recipient: " + who + " \u00B7 attempts: " + notification.attemptCount;
+
+      setChannelPill(notification);
+
+      if (notification.lastChannel) {
+        detail += " \u00B7 delivered via " + channelLabel(notification.lastChannel, notification.lastUsedFallback);
       }
-      if (status.outbox.exhausted) {
-        detail += " · retries exhausted";
-      }
-      if (status.outbox.lastError) {
-        detail += " · last error: " + status.outbox.lastError;
-      }
+
+      if (notification.exhausted) { detail += " \u00B7 retries exhausted"; }
+      if (notification.lastError) { detail += " \u00B7 last error: " + notification.lastError; }
 
       outboxNote.textContent = detail;
     } else {
       setPill(outboxPill, "Outbox", null);
+      setChannelPill(null);
       outboxNote.textContent = "";
     }
 
-    var received = signalrReceivedForRun === currentRun;
-    setPill(signalrPill, "SignalR",
-      received ? "Received" : (signalrState === "connected" ? "Connected" : signalrState));
+    var interactive = mode === "interactive";
+    var canAct = interactive && status.eventExists && status.awaitingAck && !status.cancelled;
+    ackBtn.disabled = !canAct;
+    rejectBtn.disabled = !canAct;
 
-    ackBtn.disabled = !accessToken || !currentRingEventId ||
-      status.acknowledgeStatus === "Acknowledged" ||
-      !status.eventExists;
+    if (status.cancelled) {
+      ackNote.textContent = "Run ignored \u2014 no snapshot was captured.";
+    } else if (interactive && status.awaitingAck) {
+      ackNote.textContent = "Waiting for your acknowledgment. Acknowledge to capture the snapshot, or reject to cancel.";
+    } else if (interactive && status.acknowledgedAtUtc) {
+      ackNote.textContent = "Acknowledged at " + fmtTime(status.acknowledgedAtUtc) +
+        (status.ackWaitMs !== null && status.ackWaitMs !== undefined ? " (waited " + fmtDuration(status.ackWaitMs) + ")" : "") + ".";
+    } else if (!interactive) {
+      ackNote.textContent = "Auto mode runs the full pipeline without waiting for acknowledgment.";
+    } else {
+      ackNote.textContent = "Interactive mode stops the pipeline after the ring notification and waits for your acknowledgment.";
+    }
 
-    renderSteps(status.steps || []);
+    renderSnapshotMeta(status.snapshotMeta, status);
+
     if (status.imageUrl) {
       showImage(status.imageUrl);
-    } else if (status.eventExists && status.snapshotStatus === "Requested") {
-      imgIdle.classList.add("hidden");
-      imgLoading.classList.remove("hidden");
+      updateSnapActions(status.imageUrl);
+    } else {
+      updateSnapActions(null);
+      if (status.eventExists && status.snapshotStatus === "Requested") {
+        imgIdle.classList.add("hidden");
+        imgLoading.classList.remove("hidden");
+        imgLoadingText.textContent = interactive && status.awaitingAck
+          ? "Waiting for your acknowledgment\u2026"
+          : "Waiting for the camera upload\u2026";
+      } else {
+        imgLoading.classList.add("hidden");
+        imgIdle.classList.remove("hidden");
+      }
     }
-    if (status.snapshotCommand) {
-      storageKeyEl.textContent = status.snapshotCommand.storageKey || "—";
-    }
-    resolutionEl.textContent = status.snapshotStatus === "Captured" ? "640x480" : "—";
+
+    renderTimeline(status.timeline || []);
     renderAssets(status.assets);
+    maybeShowNotification(status, interactive);
   }
 
   function renderAssets(assets) {
@@ -363,13 +627,13 @@
     }
     var parts = [];
     if (!assets.soundPresent) {
-      parts.push("sound at <code>src/Doorbell.Api/wwwroot/demo/media/chime.mp3</code> (or <code>chime.wav</code>)");
+      parts.push("<code>src/Doorbell.Api/wwwroot/demo/media/chime.wav</code>");
     }
     if (!assets.sampleImagePresent) {
-      parts.push("snapshot at <code>src/Doorbell.Api/wwwroot/demo/media/sample-snapshot.jpg</code>");
+      parts.push("<code>src/Doorbell.Api/wwwroot/demo/media/sample-snapshot.jpg</code>");
     }
-    assetsBanner.innerHTML = "⚠️ Add your own " + parts.join(" and your own ") +
-      ". The demo still runs, but the missing asset steps will fail.";
+    assetsBanner.innerHTML = "&#9888; Add " + parts.join(" and ") +
+      " so the demo can play the chime and capture a snapshot.";
     assetsBanner.classList.add("show");
   }
 
@@ -378,7 +642,14 @@
     ringBtn.disabled = false;
   }
 
+  function ensurePolling(delay) {
+    if (!currentRun || timer) return;
+    timer = setTimeout(poll, delay || 150);
+  }
+
   function poll() {
+    timer = null;
+    if (!currentRun) return;
     var url = "/demo/status?run=" + encodeURIComponent(currentRun);
     fetch(url, { headers: { "Accept": "application/json" } })
       .then(function (r) {
@@ -393,6 +664,7 @@
           if (!status.runCompleted) {
             setError("Timed out waiting for a terminal state. Check the API logs and the Mosquitto broker.");
           }
+          loadRuns();
           return;
         }
         timer = setTimeout(poll, POLL_MS);
@@ -404,154 +676,358 @@
       });
   }
 
-  function resetForNewRun(runId) {
+  function resetForNewRun(runId, runMode) {
     currentRun = runId;
+    mode = runMode || "auto";
     polls = 0;
     imageLoadedForRun = null;
+    shownRingAlertForRun = null;
+    shownSnapshotForRun = null;
     snapshotImg.classList.remove("show");
     snapshotImg.removeAttribute("src");
     imgIdle.classList.add("hidden");
     imgLoading.classList.remove("hidden");
-    storageKeyEl.textContent = "—";
-    resolutionEl.textContent = "—";
+    imgLoadingText.textContent = mode === "interactive"
+      ? "Waiting for the notification\u2026"
+      : "Waiting for the camera upload\u2026";
+    storageKeyEl.textContent = "\u2014";
+    resolutionEl.textContent = "\u2014";
+    fileSizeEl.textContent = "\u2014";
+    mimeTypeEl.textContent = "\u2014";
+    capturedAtEl.textContent = "\u2014";
+    updateSnapActions(null);
     setPill(snapPill, "Snapshot", null);
     setPill(chimePill, "Chime", null);
     setPill(outboxPill, "Outbox", null);
+    setPill(channelPill, "Channel", null);
     outboxNote.textContent = "";
     setError(null);
     setPhase("running");
-    runLine.textContent = "Run: " + runId;
-    stepsEl.innerHTML = '<li class="running"><span class="ico">•</span><span class="label">Waiting for the ring event…</span></li>';
+    runLine.textContent = "Run: " + runId + " \u00B7 mode: " + mode;
+    hideToast();
+    renderTimeline([]);
   }
 
-  function setAuthNote(msg, cls) {
-    authNote.textContent = msg;
+
+  function setDeliveryNote(msg) { deliveryNote.textContent = msg; }
+
+  function updateDeliveryUI() {
+    var online = signalrState === "connected" || signalrState === "connecting";
+
+    Array.prototype.forEach.call(channelSeg.querySelectorAll("button"), function (b) {
+      var delivery = b.getAttribute("data-delivery");
+      var active = (delivery === "online" && online)
+        || (delivery === "offline" && !online);
+      b.classList.toggle("active", active);
+    });
+
+    if (signalrState === "connected") {
+      setDeliveryNote("SignalR is online. Notifications arrive as live in-app alerts and the outbox channel is SignalR.");
+    } else if (signalrState === "connecting") {
+      setDeliveryNote("Connecting to SignalR\u2026");
+    } else if (signalrState === "reconnecting") {
+      setDeliveryNote("Reconnecting to SignalR\u2026 notifications use the FCM fallback until the connection is restored.");
+    } else if (signalrState === "unavailable") {
+      setDeliveryNote("SignalR client library unavailable. The outbox falls back to the simulated FCM push sender.");
+    } else if (signalrState === "error") {
+      setDeliveryNote("SignalR connection failed. The outbox falls back to the simulated FCM push sender.");
+    } else {
+      setDeliveryNote("SignalR is offline. The outbox falls back to the simulated FCM push sender and you get a mobile push-style popup.");
+    }
   }
 
-  function loadIdentity() {
-    return fetch("/demo/token", { method: "POST", headers: { "Accept": "application/json" } })
-      .then(function (r) {
-        if (r.status === 404) {
-          setAuthNote("Development authentication is disabled — SignalR and acknowledgment need a real identity provider.");
-          return null;
-        }
-        if (!r.ok) throw new Error("token " + r.status);
-        return r.json();
-      })
-      .then(function (data) {
-        if (!data) return;
-        accessToken = data.accessToken;
-        userId = data.userId;
-        subjectId = data.subject;
-        deviceId = data.deviceId;
-        demoTokenValue = "demo-fcm-token-" + userId;
-        setAuthNote("Authenticated as " + subjectId + ". Connecting to SignalR…");
-        connectSignalR();
-      })
-      .catch(function (e) {
-        setAuthNote("Could not obtain a demo token: " + e.message);
-      });
+  function onNotification(payload) {
+    ensurePolling(120);
+    if (payload && payload.snapshotStorageKey) {
+      shownSnapshotForRun = null;
+    }
   }
 
-  function connectSignalR() {
-    if (!window.signalR || !accessToken) {
+  function goOnline() {
+    if (signalrConnection) {
+      if (signalrState === "connected" || signalrState === "connecting") {
+        return;
+      }
+      if (signalrConnection.state === window.signalR.HubConnectionState.Connected) {
+        signalrState = "connected";
+        updateDeliveryUI();
+        return;
+      }
+    }
+
+    if (!window.signalR) {
       signalrState = "unavailable";
-      setAuthNote(accessToken
-        ? "SignalR client library unavailable (offline?). Delivery will use FCM fallback if configured."
-        : authNote.textContent);
+      updateDeliveryUI();
       return;
     }
 
-    signalrConnection = new window.signalR.HubConnectionBuilder()
-      .withUrl("/hubs/notifications", { accessTokenFactory: function () { return accessToken; } })
-      .withAutomaticReconnect()
+    signalrState = "connecting";
+    updateDeliveryUI();
+
+    var connection = new window.signalR.HubConnectionBuilder()
+      .withUrl("/hubs/notifications")
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000, 30000])
       .build();
 
-    signalrConnection.on("RingEventNotification", function (payload) {
-      signalrReceivedForRun = currentRun;
-      setPill(signalrPill, "SignalR", "Received");
-      setAuthNote("Live notification received for ring " + payload.ringEventId +
-        (payload.snapshotStorageKey ? " (snapshot ready)" : ""));
-      renderStepsRefresh();
+    connection.on("RingEventNotification", onNotification);
+
+    connection.onreconnecting(function () {
+      if (signalrConnection === connection) {
+        signalrState = "reconnecting";
+        updateDeliveryUI();
+      }
     });
 
-    signalrConnection.onreconnected(function () {
-      signalrState = "connected";
-    });
-    signalrConnection.onclose(function () {
-      signalrState = "disconnected";
+    connection.onreconnected(function () {
+      if (signalrConnection === connection) {
+        signalrState = "connected";
+        updateDeliveryUI();
+        ensurePolling(150);
+      }
     });
 
-    signalrConnection.start()
-      .then(function () { signalrState = "connected"; })
-      .catch(function (e) {
-        signalrState = "error";
-        setAuthNote("SignalR connection failed: " + e.message);
+    connection.onclose(function () {
+      if (signalrConnection === connection) {
+        signalrConnection = null;
+        signalrState = "disconnected";
+        updateDeliveryUI();
+      }
+    });
+
+    signalrConnection = connection;
+
+    connection.start()
+      .then(function () {
+        if (signalrConnection === connection) {
+          signalrState = "connected";
+          updateDeliveryUI();
+          ensurePolling(150);
+        }
+      })
+      .catch(function () {
+        if (signalrConnection === connection) {
+          signalrConnection = null;
+          signalrState = "error";
+          updateDeliveryUI();
+        }
       });
   }
 
-  function renderStepsRefresh() {
-    if (currentRun) {
-      if (!timer) { timer = setTimeout(poll, 200); }
+  function goOffline() {
+    var connection = signalrConnection;
+    signalrConnection = null;
+    signalrState = "disconnected";
+    updateDeliveryUI();
+    if (connection) {
+      connection.stop().catch(function () { });
     }
   }
 
-  function acknowledge() {
-    if (!accessToken || !currentRingEventId) return;
-    ackBtn.disabled = true;
 
-    fetch("/api/doorbells/rings/" + encodeURIComponent(currentRingEventId) + "/acknowledge", {
+  function hideToast() {
+    while (toastWrap.firstChild) { toastWrap.removeChild(toastWrap.firstChild); }
+  }
+
+  function showToast(opts) {
+    hideToast();
+
+    var box = document.createElement("div");
+    box.className = "toast " + (opts.isFcm ? "fcm" : "signalr");
+
+    var top = document.createElement("div");
+    top.className = "t-app";
+    top.innerHTML = '<span class="t-appicon">&#128276;</span>' +
+      '<span class="t-appname">DoorBell</span>' +
+      '<span class="t-source">' + (opts.isFcm
+        ? "FCM Mobile Push Notification"
+        : "Live SignalR Notification") + "</span>";
+    box.appendChild(top);
+
+    var title = document.createElement("div");
+    title.className = "t-title";
+    title.textContent = opts.title;
+    box.appendChild(title);
+
+    var body = document.createElement("div");
+    body.className = "t-body";
+    body.innerHTML = opts.body;
+    box.appendChild(body);
+
+    var actions = document.createElement("div");
+    actions.className = "t-actions";
+
+    if (opts.actions) {
+      opts.actions.forEach(function (action) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost" + (action.primary ? " primary" : "") + (action.danger ? " danger" : "");
+        btn.textContent = action.label;
+        btn.addEventListener("click", action.onClick);
+        actions.appendChild(btn);
+      });
+    }
+
+    box.appendChild(actions);
+    toastWrap.appendChild(box);
+  }
+
+  function notificationToast(notification, title, body, isFcm, actions) {
+    var channel = channelLabel(notification.lastChannel, notification.lastUsedFallback);
+    var sent = notification.lastAttemptAtUtc ? fmtTime(notification.lastAttemptAtUtc) : fmtTime(new Date().toISOString());
+    showToast({
+      isFcm: isFcm,
+      title: title,
+      body: body +
+        "<br>Channel: <b>" + channel + "</b>" +
+        "<br>Time: " + sent,
+      actions: actions
+    });
+  }
+
+  function maybeShowNotification(status, interactive) {
+    var ringAlert = status.ringAlert;
+    var snapshotDelivery = status.snapshotDelivery;
+
+    if (interactive
+      && ringAlert
+      && ringAlert.status === "Sent"
+      && !status.cancelled
+      && shownRingAlertForRun !== currentRun) {
+      shownRingAlertForRun = currentRun;
+      notificationToast(
+        ringAlert,
+        "Doorbell Ringing \u2014 Action Required",
+        "Ring <b>" + (status.ringEventId || currentRun) + "</b><br>A visitor is at the door. Acknowledge to capture the snapshot.",
+        ringAlert.lastChannel === "Fcm",
+        [
+          { label: "\u2705 Acknowledge & Load Snapshot", primary: true, onClick: acknowledge },
+          { label: "\u274C Reject / Ignore Ring", danger: true, onClick: reject }
+        ]);
+      return;
+    }
+
+    if (snapshotDelivery
+      && snapshotDelivery.status === "Sent"
+      && !status.cancelled
+      && shownSnapshotForRun !== currentRun) {
+      shownSnapshotForRun = currentRun;
+      notificationToast(
+        snapshotDelivery,
+        "Snapshot Ready",
+        "Ring <b>" + (status.ringEventId || currentRun) + "</b><br>The snapshot was captured and delivered.",
+        snapshotDelivery.lastChannel === "Fcm",
+        [
+          { label: "\uD83D\uDD0D View Snapshot", onClick: hideToast },
+          { label: "\u274C Dismiss", onClick: hideToast }
+        ]);
+    }
+  }
+
+
+  function acknowledge() {
+    if (!currentRun) return;
+    ackBtn.disabled = true;
+    rejectBtn.disabled = true;
+
+    fetch("/demo/runs/" + encodeURIComponent(currentRun) + "/acknowledge", {
       method: "POST",
-      headers: { "Accept": "application/json", "Authorization": "Bearer " + accessToken }
+      headers: { "Accept": "application/json" }
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ": " + t); });
         return r.json();
       })
-      .then(function (data) {
-        setAuthNote(data.alreadyAcknowledged
-          ? "Ring was already acknowledged."
-          : "Ring acknowledged at " + data.acknowledgedAtUtc + ".");
-        if (currentRun && !timer) { timer = setTimeout(poll, 150); }
+      .then(function () {
+        hideToast();
+        ensurePolling(120);
       })
       .catch(function (e) {
-        ackBtn.disabled = false;
-        setAuthNote("Acknowledgement failed: " + e.message);
+        setError("Acknowledgement failed: " + e.message);
       });
   }
 
-  function registerToken() {
-    if (!accessToken) { setAuthNote("Not authenticated."); return; }
-    fetch("/api/users/me/device-tokens", {
+  function reject() {
+    if (!currentRun) return;
+    ackBtn.disabled = true;
+    rejectBtn.disabled = true;
+
+    fetch("/demo/runs/" + encodeURIComponent(currentRun) + "/reject", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + accessToken
-      },
-      body: JSON.stringify({ token: demoTokenValue, platform: "demo" })
+      headers: { "Accept": "application/json" }
     })
       .then(function (r) {
-        if (!r.ok) throw new Error("register " + r.status);
+        if (!r.ok) return r.text().then(function (t) { throw new Error(r.status + ": " + t); });
         return r.json();
       })
       .then(function () {
-        setAuthNote("Registered FCM token for the demo user. With no active SignalR connection the " +
-          "outbox will route to FCM (and report honestly if Firebase is unconfigured).");
+        hideToast();
+        ensurePolling(120);
       })
-      .catch(function (e) { setAuthNote("Token registration failed: " + e.message); });
+      .catch(function (e) {
+        setError("Reject failed: " + e.message);
+      });
   }
 
-  function clearToken() {
-    if (!accessToken) { setAuthNote("Not authenticated."); return; }
-    fetch("/api/users/me/device-tokens?token=" + encodeURIComponent(demoTokenValue), {
-      method: "DELETE",
-      headers: { "Authorization": "Bearer " + accessToken }
-    })
-      .then(function (r) {
-        setAuthNote(r.status === 204 ? "Removed the demo FCM token." : "No demo token to remove.");
+
+  function loadRuns() {
+    fetch("/demo/runs", { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && data.runs) { renderRuns(data.runs); }
       })
-      .catch(function (e) { setAuthNote("Token removal failed: " + e.message); });
+      .catch(function () { });
   }
+
+  function renderRuns(runs) {
+    historyEl.innerHTML = "";
+    if (!runs.length) {
+      var empty = document.createElement("div");
+      empty.className = "note";
+      empty.textContent = "No runs yet.";
+      historyEl.appendChild(empty);
+      return;
+    }
+
+    runs.forEach(function (run) {
+      var item = document.createElement("div");
+      item.className = "history-item" + (run.runId === currentRun ? " active" : "");
+
+      var modeTag = document.createElement("span");
+      modeTag.className = "tag " + (run.mode || "").toLowerCase();
+      modeTag.textContent = run.mode;
+
+      var rid = document.createElement("span");
+      rid.className = "rid";
+      rid.textContent = run.runId;
+
+      var spacer = document.createElement("span");
+      spacer.className = "spacer";
+
+      var phaseTag = document.createElement("span");
+      phaseTag.className = "tag " + (run.phase || "");
+      phaseTag.textContent = run.phase;
+
+      var ts = document.createElement("span");
+      ts.className = "note";
+      ts.style.marginTop = "0";
+      ts.textContent = fmtTime(run.requestedAtUtc);
+
+      item.appendChild(modeTag);
+      item.appendChild(rid);
+      item.appendChild(spacer);
+      item.appendChild(phaseTag);
+      item.appendChild(ts);
+
+      item.addEventListener("click", function () {
+        stopPolling();
+        resetForNewRun(run.runId, (run.mode || "auto").toLowerCase());
+        ensurePolling(150);
+      });
+
+      historyEl.appendChild(item);
+    });
+  }
+
 
   function playChime() {
     if (muted) return;
@@ -560,7 +1036,7 @@
       var p = chime.play();
       if (p && p.catch) {
         p.catch(function () {
-          audioNote.textContent = "Sound blocked/unavailable — add chime.mp3 and/or unmute. Click Ring to retry.";
+          audioNote.textContent = "Sound blocked by the browser \u2014 click Ring Doorbell again to retry.";
         });
       }
     } catch (e) {
@@ -568,14 +1044,33 @@
     }
   }
 
+
+  channelSeg.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-delivery]");
+    if (!btn) return;
+    if (btn.getAttribute("data-delivery") === "offline") { goOffline(); } else { goOnline(); }
+  });
+
+  modeSeg.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    mode = btn.getAttribute("data-mode");
+    Array.prototype.forEach.call(modeSeg.querySelectorAll("button"), function (b) {
+      b.classList.toggle("active", b === btn);
+    });
+  });
+
   ringBtn.addEventListener("click", function () {
     ringBtn.disabled = true;
     setError(null);
     setPhase("running");
-    // Play within the user-gesture handler so autoplay policy is satisfied.
     playChime();
 
-    fetch("/demo/simulate", { method: "POST", headers: { "Accept": "application/json" } })
+    fetch("/demo/simulate", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: mode })
+    })
       .then(function (r) {
         if (!r.ok) {
           return r.text().then(function (t) { throw new Error("simulate " + r.status + ": " + t); });
@@ -583,8 +1078,9 @@
         return r.json();
       })
       .then(function (data) {
-        resetForNewRun(data.runId);
-        timer = setTimeout(poll, 400);
+        resetForNewRun(data.runId, (data.mode || mode).toLowerCase());
+        ensurePolling(400);
+        loadRuns();
       })
       .catch(function (e) {
         ringBtn.disabled = false;
@@ -596,21 +1092,31 @@
   muteBtn.addEventListener("click", function () {
     muted = !muted;
     chime.muted = muted;
-    muteBtn.textContent = muted ? "🔇 Sound off" : "🔊 Sound on";
+    muteBtn.innerHTML = muted ? "&#128263; Sound off" : "&#128266; Sound on";
     audioNote.textContent = muted ? "Muted." : "";
   });
 
   ackBtn.addEventListener("click", acknowledge);
-  tokenBtn.addEventListener("click", registerToken);
-  clearTokenBtn.addEventListener("click", clearToken);
+  rejectBtn.addEventListener("click", reject);
 
-  // Initial asset banner check (uses a status call with a dummy run id).
+  fullscreenBtn.addEventListener("click", function () {
+    if (fullscreenBtn.classList.contains("disabled")) return;
+    modalImg.src = downloadBtn.href;
+    snapshotModal.classList.add("show");
+  });
+
+  modalClose.addEventListener("click", function () { snapshotModal.classList.remove("show"); });
+  snapshotModal.addEventListener("click", function (e) {
+    if (e.target === snapshotModal) { snapshotModal.classList.remove("show"); }
+  });
+
+  goOnline();
+  loadRuns();
+
   fetch("/demo/status?run=demo-bootstrap", { headers: { "Accept": "application/json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (s) { if (s) renderAssets(s.assets); })
-    .catch(function () { /* ignore */ });
-
-  loadIdentity();
+    .catch(function () { });
 })();
 </script>
 </body>

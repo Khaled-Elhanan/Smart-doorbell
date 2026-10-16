@@ -1,5 +1,4 @@
 ﻿namespace Doorbell.Application.Abstractions.Storage;
-// Deal with object storage -> Azure 
 public interface IObjectStorage
 {
     Task<Uri> CreateUploadUrlAsync(
