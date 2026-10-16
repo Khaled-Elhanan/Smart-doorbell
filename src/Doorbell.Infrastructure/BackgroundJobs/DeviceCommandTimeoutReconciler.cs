@@ -126,7 +126,6 @@ public sealed class DeviceCommandTimeoutReconciler : BackgroundService
             }
             catch (DbUpdateConcurrencyException ex)
             {
-                // A chime ack or an earlier pass already changed this row.
                 _logger.LogWarning(
                     ex,
                     "Concurrent update while timing out chime for ring event {RingEventId}; skipped.",

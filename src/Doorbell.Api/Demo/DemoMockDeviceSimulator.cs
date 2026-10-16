@@ -17,6 +17,8 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
     private const string ChimeCommandFilter =
         "devices/+/chime/+/play/command";
 
+    private const string SnapshotRequestSuffix = ":snapshot";
+
     private sealed record SnapshotCommandInvocation(
         [property: System.Text.Json.Serialization.JsonPropertyName("requestId")]
         string RequestId,
@@ -34,6 +36,7 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptions<DemoOptions> _options;
     private readonly IWebHostEnvironment _environment;
+    private readonly DemoRunStore _runs;
     private readonly ILogger<DemoMockDeviceSimulator> _logger;
 
     public DemoMockDeviceSimulator(
@@ -42,6 +45,7 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
         IHttpClientFactory httpClientFactory,
         IOptions<DemoOptions> options,
         IWebHostEnvironment environment,
+        DemoRunStore runs,
         ILogger<DemoMockDeviceSimulator> logger)
     {
         _connectionManager = connectionManager;
@@ -49,6 +53,7 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
         _httpClientFactory = httpClientFactory;
         _options = options;
         _environment = environment;
+        _runs = runs;
         _logger = logger;
     }
 
@@ -162,6 +167,85 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
             "/snapshot/result",
             StringComparison.Ordinal);
 
+        var run = _runs.Get(ExtractRunId(invocation.RequestId));
+
+        if (run is null)
+        {
+            _logger.LogWarning(
+                "Demo mock camera: no local run for {RequestId}; ignoring the snapshot command.",
+                invocation.RequestId);
+
+            await args.AcknowledgeAsync(CancellationToken.None);
+
+            return;
+        }
+
+        if (run is { Cancelled: true })
+        {
+            _logger.LogInformation(
+                "Demo mock camera: run {RunId} was rejected; discarding the snapshot command.",
+                run.RunId);
+
+            await args.AcknowledgeAsync(CancellationToken.None);
+
+            return;
+        }
+
+        if (run is { Mode: DemoMode.Interactive })
+        {
+            _logger.LogInformation(
+                "Demo mock camera: holding snapshot for run {RunId} pending acknowledgment.",
+                run.RunId);
+
+            await args.AcknowledgeAsync(CancellationToken.None);
+
+            _ = Task.Run(() => ResumeInteractiveAsync(run, invocation, resultTopic));
+
+            return;
+        }
+
+        await UploadAndPublishAsync(invocation, resultTopic, CancellationToken.None);
+
+        await args.AcknowledgeAsync(CancellationToken.None);
+    }
+
+    private async Task ResumeInteractiveAsync(
+        DemoRun run,
+        SnapshotCommandInvocation invocation,
+        string resultTopic)
+    {
+        try
+        {
+            var decision = await run.AckGate.Task;
+
+            if (decision != DemoAckDecision.Upload)
+            {
+                _logger.LogInformation(
+                    "Demo mock camera: run {RunId} was not acknowledged; no snapshot captured.",
+                    run.RunId);
+
+                return;
+            }
+
+            await UploadAndPublishAsync(
+                invocation,
+                resultTopic,
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Demo mock camera: interactive snapshot resume failed for {RequestId}.",
+                invocation.RequestId);
+        }
+    }
+
+    private async Task UploadAndPublishAsync(
+        SnapshotCommandInvocation invocation,
+        string resultTopic,
+        CancellationToken cancellationToken)
+    {
         var samplePath = Path.Combine(
             _environment.ContentRootPath,
             _options.Value.SampleImageRelativePath);
@@ -173,18 +257,14 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
                 "no upload, no result (snapshot will time out).",
                 samplePath);
 
-            await args.AcknowledgeAsync(
-                CancellationToken.None);
-
             return;
         }
 
         var imageBytes = await File.ReadAllBytesAsync(
             samplePath,
-            CancellationToken.None);
+            cancellationToken);
 
-        using var http = _httpClientFactory.CreateClient(
-            "DemoMockDevice");
+        using var http = _httpClientFactory.CreateClient("DemoMockDevice");
 
         using var content = new ByteArrayContent(imageBytes);
 
@@ -194,7 +274,7 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
         using var response = await http.PutAsync(
             invocation.UploadUrl,
             content,
-            CancellationToken.None);
+            cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
@@ -209,10 +289,7 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
                 invocation.RequestId,
                 _options.Value.SnapshotResolution,
                 DateTime.UtcNow),
-            CancellationToken.None);
-
-        await args.AcknowledgeAsync(
-            CancellationToken.None);
+            cancellationToken);
     }
 
     private async Task HandleChimeCommandAsync(
@@ -257,5 +334,12 @@ public sealed class DemoMockDeviceSimulator : BackgroundService
 
         await args.AcknowledgeAsync(
             CancellationToken.None);
+    }
+
+    private static string ExtractRunId(string requestId)
+    {
+        return requestId.EndsWith(SnapshotRequestSuffix, StringComparison.Ordinal)
+            ? requestId[..^SnapshotRequestSuffix.Length]
+            : requestId;
     }
 }

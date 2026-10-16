@@ -18,7 +18,6 @@ namespace Doorbell.Domain.Entities
 
         public DateTime CreatedAtUtc { get; private set; }
 
-        // Snapshot
         public SnapshotStatus SnapshotStatus { get; private set; }
 
         public string? SnapshotStorageKey { get; private set; }
@@ -27,12 +26,10 @@ namespace Doorbell.Domain.Entities
 
         public DateTime? SnapshotCapturedAtUtc { get; private set; }
 
-        // Chime
         public ChimeStatus ChimeStatus { get; private set; }
 
         public string ChimeMelodyId { get; private set; } = null!;
 
-        // User acknowledgement
         public AcknowledgeStatus AcknowledgeStatus { get; private set; }
 
         public DateTime? AcknowledgedAtUtc { get; private set; }
@@ -41,7 +38,6 @@ namespace Doorbell.Domain.Entities
 
         private DoorbellRingEvent()
         {
-            // EF Core
         }
 
         private DoorbellRingEvent(

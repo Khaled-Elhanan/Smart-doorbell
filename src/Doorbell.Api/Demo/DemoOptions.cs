@@ -6,11 +6,13 @@ public sealed class DemoOptions
         "wwwroot/demo/media/sample-snapshot.jpg";
 
     public string SoundRelativePath { get; set; } =
-        "wwwroot/demo/media/chime.mp3";
+        "wwwroot/demo/media/chime.wav";
 
     public string SnapshotResolution { get; set; } = "640x480";
 
     public int SnapshotTimeoutSeconds { get; set; } = 8;
+
+    public int InteractiveSnapshotTimeoutSeconds { get; set; } = 900;
 
     public int MaxAttempts { get; set; } = 3;
 }
