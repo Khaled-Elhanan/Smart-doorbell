@@ -9,6 +9,8 @@ namespace Doorbell.Domain.Entities
 
         public Guid RingEventId { get; private set; }
 
+        public NotificationKind Kind { get; private set; }
+
         public Guid RecipientUserId { get; private set; }
 
         public NotificationStatus Status { get; private set; }
@@ -27,6 +29,7 @@ namespace Doorbell.Domain.Entities
 
         private NotificationOutbox(
             Guid ringEventId,
+            NotificationKind kind,
             Guid recipientUserId)
         {
             if (ringEventId == Guid.Empty)
@@ -37,6 +40,7 @@ namespace Doorbell.Domain.Entities
 
             Id = Guid.NewGuid();
             RingEventId = ringEventId;
+            Kind = kind;
             RecipientUserId = recipientUserId;
             Status = NotificationStatus.Pending;
             AttemptCount = 0;
@@ -45,10 +49,12 @@ namespace Doorbell.Domain.Entities
 
         public static NotificationOutbox Create(
             Guid ringEventId,
+            NotificationKind kind,
             Guid recipientUserId)
         {
             return new NotificationOutbox(
                 ringEventId,
+                kind,
                 recipientUserId);
         }
 

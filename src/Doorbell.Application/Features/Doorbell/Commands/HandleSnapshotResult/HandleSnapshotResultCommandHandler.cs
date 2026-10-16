@@ -1,5 +1,6 @@
 using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Application.Abstractions.Repositories;
+using Doorbell.Domain.Entities;
 using Doorbell.Domain.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,17 +12,23 @@ public sealed class HandleSnapshotResultCommandHandler
 {
     private readonly IDeviceCommandRepository _deviceCommandRepository;
     private readonly IDoorbellRingEventRepository _ringEventRepository;
+    private readonly IDeviceRepository _deviceRepository;
+    private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<HandleSnapshotResultCommandHandler> _logger;
 
     public HandleSnapshotResultCommandHandler(
         IDeviceCommandRepository deviceCommandRepository,
         IDoorbellRingEventRepository ringEventRepository,
+        IDeviceRepository deviceRepository,
+        IOutboxRepository outboxRepository,
         IUnitOfWork unitOfWork,
         ILogger<HandleSnapshotResultCommandHandler> logger)
     {
         _deviceCommandRepository = deviceCommandRepository;
         _ringEventRepository = ringEventRepository;
+        _deviceRepository = deviceRepository;
+        _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -85,6 +92,32 @@ public sealed class HandleSnapshotResultCommandHandler
         if (command.Status == DeviceCommandStatus.Sent)
         {
             command.MarkCompleted();
+        }
+
+        var snapshotDelivery =
+            await _outboxRepository.GetByRingEventIdAndKindAsync(
+                ringEvent.Id,
+                NotificationKind.SnapshotReady,
+                cancellationToken);
+
+        if (snapshotDelivery is null)
+        {
+            var device = await _deviceRepository.GetByIdAsync(
+                ringEvent.DeviceId,
+                cancellationToken);
+
+            if (device is null)
+            {
+                throw new InvalidOperationException(
+                    $"Device '{ringEvent.DeviceId}' for ring event '{ringEvent.Id}' was not found.");
+            }
+
+            await _outboxRepository.AddAsync(
+                NotificationOutbox.Create(
+                    ringEvent.Id,
+                    NotificationKind.SnapshotReady,
+                    device.OwnerUserId),
+                cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

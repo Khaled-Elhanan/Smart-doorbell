@@ -201,7 +201,6 @@ public sealed class MqttConnectionManager : IAsyncDisposable
 
     private static TimeSpan ComputeBackoffDelay(int failedAttempts)
     {
-        // 1s, 2s, 4s, 8s, capped at 8s, with +/-20% jitter.
         var exponent = Math.Min(failedAttempts - 1, 3);
         var baseMs =
             BaseRetryDelay.TotalMilliseconds * Math.Pow(2, exponent);

@@ -95,7 +95,6 @@ public sealed class RingMqttConsumer : BackgroundService
         }
         catch (JsonException ex)
         {
-            // Poison message: preserve it, then ACK so it leaves the queue.
             _logger.LogError(
                 ex,
                 "Invalid ring MQTT payload on {Topic}; dead-lettering.",
@@ -129,7 +128,6 @@ public sealed class RingMqttConsumer : BackgroundService
             return;
         }
 
-        // C7: the topic deviceId is authoritative; the body must match it.
         var topicDeviceId = ExtractDeviceIdFromTopic(
             args.ApplicationMessage.Topic);
 
@@ -196,8 +194,6 @@ public sealed class RingMqttConsumer : BackgroundService
         }
         catch (Exception ex)
         {
-            // Explicit failure policy: do NOT ACK, and mark processing failed so
-            // the broker redelivers this QoS1 message (at-least-once delivery).
             _logger.LogError(
                 ex,
                 "Failed to process ring MQTT message on {Topic}.",
@@ -219,7 +215,6 @@ public sealed class RingMqttConsumer : BackgroundService
         }
         catch (DbUpdateException ex)
         {
-            // A concurrent delivery recorded the same intent first; it owns the publish.
             _logger.LogWarning(
                 ex,
                 "Concurrent orchestration for ring event {RingEventId}; intent already recorded.",

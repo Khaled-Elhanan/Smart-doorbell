@@ -16,6 +16,9 @@ namespace Doorbell.Infrastructure.Persistence.Configurations
             builder.Property(x => x.RingEventId)
                 .IsRequired();
 
+            builder.Property(x => x.Kind)
+                .IsRequired();
+
             builder.Property(x => x.RecipientUserId)
                 .IsRequired();
 
@@ -31,7 +34,7 @@ namespace Doorbell.Infrastructure.Persistence.Configurations
             builder.Property(x => x.RowVersion)
                 .IsRowVersion();
 
-            builder.HasIndex(x => x.RingEventId)
+            builder.HasIndex(x => new { x.RingEventId, x.Kind })
                 .IsUnique();
 
             builder.HasOne<DoorbellRingEvent>()

@@ -156,7 +156,6 @@ public sealed class SnapshotResultConsumer : BackgroundService
         }
         catch (DbUpdateException ex)
         {
-            // A duplicate or concurrent result already applied the same state.
             _logger.LogWarning(
                 ex,
                 "Concurrent snapshot result; state already applied.");
@@ -166,7 +165,6 @@ public sealed class SnapshotResultConsumer : BackgroundService
         }
         catch (Exception ex)
         {
-            // Explicit failure policy: do NOT ACK so the message is redelivered.
             _logger.LogError(
                 ex,
                 "Failed to process snapshot result MQTT message on {Topic}.",

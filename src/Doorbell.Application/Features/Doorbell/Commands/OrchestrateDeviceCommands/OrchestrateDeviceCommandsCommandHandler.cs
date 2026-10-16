@@ -149,12 +149,13 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
 
         if (intentChanged)
         {
-            var notification =
-                await _outboxRepository.GetByRingEventIdAsync(
+            var ringAlert =
+                await _outboxRepository.GetByRingEventIdAndKindAsync(
                     ringEvent.Id,
+                    NotificationKind.RingAlert,
                     cancellationToken);
 
-            if (notification is null)
+            if (ringAlert is null)
             {
                 var device =
                     await _deviceRepository.GetByIdAsync(
@@ -170,6 +171,7 @@ public sealed class OrchestrateDeviceCommandsCommandHandler
                 await _outboxRepository.AddAsync(
                     NotificationOutbox.Create(
                         ringEvent.Id,
+                        NotificationKind.RingAlert,
                         device.OwnerUserId),
                     cancellationToken);
             }

@@ -51,7 +51,6 @@ public sealed class MqttDeadLetterPublisher
         }
         catch (Exception ex)
         {
-            // Best-effort only; the failed message is already logged.
             _logger.LogError(
                 ex,
                 "Failed to dead-letter message from {Topic}.",

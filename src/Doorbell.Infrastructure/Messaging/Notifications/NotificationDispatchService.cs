@@ -1,5 +1,4 @@
 using Doorbell.Application.Abstractions.Messaging;
-using Doorbell.Application.Abstractions.Persistence;
 using Doorbell.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,7 +10,6 @@ public sealed class NotificationDispatchService : INotificationDispatchService
     private readonly IUserConnectionRegistry _connections;
     private readonly ISignalRNotificationSender _signalR;
     private readonly IFcmNotificationSender _fcm;
-    private readonly IUserDeviceTokenRepository _tokenRepository;
     private readonly NotificationOutboxOptions _options;
     private readonly ILogger<NotificationDispatchService> _logger;
 
@@ -19,14 +17,12 @@ public sealed class NotificationDispatchService : INotificationDispatchService
         IUserConnectionRegistry connections,
         ISignalRNotificationSender signalR,
         IFcmNotificationSender fcm,
-        IUserDeviceTokenRepository tokenRepository,
         IOptions<NotificationOutboxOptions> options,
         ILogger<NotificationDispatchService> logger)
     {
         _connections = connections;
         _signalR = signalR;
         _fcm = fcm;
-        _tokenRepository = tokenRepository;
         _options = options.Value;
         _logger = logger;
     }
@@ -39,7 +35,10 @@ public sealed class NotificationDispatchService : INotificationDispatchService
 
         if (_connections.IsConnected(userId))
         {
-            var signalResult = await _signalR.SendAsync(userId, message, cancellationToken);
+            var signalResult = await _signalR.SendAsync(
+                userId,
+                message,
+                cancellationToken);
 
             if (signalResult.IsSuccess)
             {
@@ -51,7 +50,7 @@ public sealed class NotificationDispatchService : INotificationDispatchService
             }
 
             _logger.LogWarning(
-                "SignalR delivery failed for user {UserId}: {Error}",
+                "SignalR delivery failed for recipient {UserId}: {Error}. Falling back to FCM.",
                 userId,
                 signalResult.ErrorMessage);
 
@@ -64,61 +63,36 @@ public sealed class NotificationDispatchService : INotificationDispatchService
                     ErrorMessage: signalResult.ErrorMessage);
             }
 
-            return await TryFcmAsync(
+            return await SendViaFcmAsync(
                 message,
-                usedFallback: true,
-                priorError: signalResult.ErrorMessage,
+                signalResult.ErrorMessage,
                 cancellationToken);
         }
 
-        return await TryFcmAsync(
+        _logger.LogInformation(
+            "Recipient {UserId} has no active SignalR connection; delivering via FCM.",
+            userId);
+
+        return await SendViaFcmAsync(
             message,
-            usedFallback: false,
-            priorError: null,
+            null,
             cancellationToken);
     }
 
-    private async Task<NotificationDispatchResult> TryFcmAsync(
+    private async Task<NotificationDispatchResult> SendViaFcmAsync(
         NotificationMessage message,
-        bool usedFallback,
         string? priorError,
         CancellationToken cancellationToken)
     {
-        var userId = message.RecipientUserId;
-
-        var tokens = await _tokenRepository.GetByUserIdAsync(userId, cancellationToken);
-
-        if (tokens.Count == 0)
-        {
-            var detail = priorError is null
-                ? "No active SignalR connection and no FCM device token is registered for the recipient."
-                : "SignalR delivery failed and no FCM device token is registered for the recipient. "
-                    + $"SignalR error: {priorError}";
-
-            return new NotificationDispatchResult(
-                IsSuccess: false,
-                Channel: priorError is null ? null : NotificationChannel.SignalR,
-                UsedFallback: usedFallback,
-                ErrorMessage: detail);
-        }
-
-        if (!_fcm.IsConfigured)
-        {
-            return new NotificationDispatchResult(
-                IsSuccess: false,
-                Channel: NotificationChannel.Fcm,
-                UsedFallback: usedFallback,
-                ErrorMessage:
-                    "FCM delivery is required because no active SignalR connection is available, "
-                    + $"but Firebase is not configured: {_fcm.ConfigurationStatus}");
-        }
-
-        var fcmResult = await _fcm.SendAsync(userId, message, cancellationToken);
+        var result = await _fcm.SendAsync(
+            message.RecipientUserId,
+            message,
+            cancellationToken);
 
         return new NotificationDispatchResult(
-            IsSuccess: fcmResult.IsSuccess,
+            IsSuccess: result.IsSuccess,
             Channel: NotificationChannel.Fcm,
-            UsedFallback: usedFallback,
-            ErrorMessage: fcmResult.ErrorMessage);
+            UsedFallback: true,
+            ErrorMessage: result.ErrorMessage ?? priorError);
     }
 }

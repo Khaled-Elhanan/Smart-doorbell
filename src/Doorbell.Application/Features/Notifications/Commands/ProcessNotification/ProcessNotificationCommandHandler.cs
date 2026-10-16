@@ -86,8 +86,12 @@ public sealed class ProcessNotificationCommandHandler : IRequestHandler<ProcessN
             RecipientUserId: outbox.RecipientUserId,
             DeviceId: ringEvent.DeviceId,
             RingTimestampUtc: ringEvent.RingTimestampUtc,
-            SnapshotStorageKey: ringEvent.SnapshotStorageKey,
-            SnapshotResolution: ringEvent.SnapshotResolution);
+            SnapshotStorageKey: outbox.Kind == NotificationKind.SnapshotReady
+                ? ringEvent.SnapshotStorageKey
+                : null,
+            SnapshotResolution: outbox.Kind == NotificationKind.SnapshotReady
+                ? ringEvent.SnapshotResolution
+                : null);
 
         NotificationDispatchResult dispatchResult;
 

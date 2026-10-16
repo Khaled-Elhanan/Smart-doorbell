@@ -1,4 +1,5 @@
 using Doorbell.Domain.Entities;
+using Doorbell.Domain.Enums;
 
 namespace Doorbell.Application.Abstractions.Persistence
 {
@@ -12,8 +13,13 @@ namespace Doorbell.Application.Abstractions.Persistence
             Guid id,
             CancellationToken cancellationToken);
 
-        Task<NotificationOutbox?> GetByRingEventIdAsync(
+        Task<IReadOnlyList<NotificationOutbox>> GetByRingEventIdAsync(
             Guid ringEventId,
+            CancellationToken cancellationToken);
+
+        Task<NotificationOutbox?> GetByRingEventIdAndKindAsync(
+            Guid ringEventId,
+            NotificationKind kind,
             CancellationToken cancellationToken);
 
         Task<IReadOnlyList<NotificationOutbox>> GetUnprocessedAsync(

@@ -1,15 +1,15 @@
 using Doorbell.Application.Abstractions.Messaging;
 using Doorbell.Application.Abstractions.Persistence;
+using Doorbell.Application.Abstractions.Recipients;
 using Doorbell.Application.Abstractions.Repositories;
-using Doorbell.Application.Abstractions.Security;
 using Doorbell.Application.Abstractions.Storage;
 using Doorbell.Infrastructure.BackgroundJobs;
 using Doorbell.Infrastructure.Messaging.Mqtt;
 using Doorbell.Infrastructure.Messaging.Mqtt.Consumers;
 using Doorbell.Infrastructure.Messaging.Mqtt.Publishers;
 using Doorbell.Infrastructure.Messaging.Notifications;
+using Doorbell.Infrastructure.Persistence;
 using Doorbell.Infrastructure.Persistence.Repositories;
-using Doorbell.Infrastructure.Security;
 using Doorbell.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,10 +42,6 @@ namespace Doorbell.Infrastructure
 
             services.AddScoped<IUserRepository, UserRepository>();
 
-            services.AddHttpContextAccessor();
-
-            services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
-
             services.AddScoped<IDeviceRepository, DeviceRepository>();
 
             services.AddScoped<
@@ -61,12 +57,10 @@ namespace Doorbell.Infrastructure
             services.AddScoped<IOutboxRepository, OutboxRepository>();
 
             services.AddScoped<
-                IUserDeviceTokenRepository,
-                UserDeviceTokenRepository>();
-
-            services.AddScoped<
                 IDeviceCommandRepository,
                 DeviceCommandRepository>();
+
+            services.AddSingleton<IRecipientProvider, RecipientProvider>();
 
             services.AddSingleton<
                 IStorageKeyGenerator,
@@ -98,14 +92,11 @@ namespace Doorbell.Infrastructure
             services.Configure<NotificationOutboxOptions>(
                 configuration.GetSection(NotificationOutboxOptions.SectionName));
 
-            services.Configure<FirebaseMessagingOptions>(
-                configuration.GetSection(FirebaseMessagingOptions.SectionName));
-
             services.AddSingleton<IUserConnectionRegistry, UserConnectionRegistry>();
 
             services.AddScoped<ISignalRNotificationSender, SignalRNotificationSender>();
 
-            services.AddScoped<IFcmNotificationSender, FirebaseFcmSender>();
+            services.AddScoped<IFcmNotificationSender, SimulatedFcmNotificationSender>();
 
             services.AddScoped<INotificationDispatchService, NotificationDispatchService>();
 

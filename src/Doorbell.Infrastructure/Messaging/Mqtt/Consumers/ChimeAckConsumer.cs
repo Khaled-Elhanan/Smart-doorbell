@@ -154,7 +154,6 @@ public sealed class ChimeAckConsumer : BackgroundService
         }
         catch (DbUpdateException ex)
         {
-            // A duplicate or concurrent ack already applied the same state.
             _logger.LogWarning(
                 ex,
                 "Concurrent chime ack; state already applied.");
@@ -164,7 +163,6 @@ public sealed class ChimeAckConsumer : BackgroundService
         }
         catch (Exception ex)
         {
-            // Explicit failure policy: do NOT ACK so the message is redelivered.
             _logger.LogError(
                 ex,
                 "Failed to process chime ack MQTT message on {Topic}.",

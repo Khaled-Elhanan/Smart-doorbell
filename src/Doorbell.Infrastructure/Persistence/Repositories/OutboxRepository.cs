@@ -34,13 +34,25 @@ namespace Doorbell.Infrastructure.Persistence.Repositories
                     cancellationToken);
         }
 
-        public Task<NotificationOutbox?> GetByRingEventIdAsync(
+        public async Task<IReadOnlyList<NotificationOutbox>> GetByRingEventIdAsync(
             Guid ringEventId,
+            CancellationToken cancellationToken)
+        {
+            return await _context.NotificationOutboxes
+                .AsNoTracking()
+                .Where(x => x.RingEventId == ringEventId)
+                .OrderBy(x => x.Kind)
+                .ToListAsync(cancellationToken);
+        }
+
+        public Task<NotificationOutbox?> GetByRingEventIdAndKindAsync(
+            Guid ringEventId,
+            NotificationKind kind,
             CancellationToken cancellationToken)
         {
             return _context.NotificationOutboxes
                 .FirstOrDefaultAsync(
-                    x => x.RingEventId == ringEventId,
+                    x => x.RingEventId == ringEventId && x.Kind == kind,
                     cancellationToken);
         }
 

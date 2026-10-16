@@ -1,8 +1,6 @@
 ﻿using Doorbell.Domain.Entities;
+using Doorbell.Infrastructure.Persistence.Converters;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Doorbell.Infrastructure.Persistence.Context
 {
@@ -31,8 +29,15 @@ namespace Doorbell.Infrastructure.Persistence.Context
         public DbSet<NotificationAttempt> NotificationAttempts =>
             Set<NotificationAttempt>();
 
-        public DbSet<UserDeviceToken> UserDeviceTokens =>
-            Set<UserDeviceToken>();
+        protected override void ConfigureConventions(
+            ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder
+                .Properties<DateTime>()
+                .HaveConversion<UtcDateTimeConverter>();
+
+            base.ConfigureConventions(configurationBuilder);
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

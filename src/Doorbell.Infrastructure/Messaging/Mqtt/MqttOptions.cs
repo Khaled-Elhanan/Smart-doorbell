@@ -10,8 +10,6 @@ namespace Doorbell.Infrastructure.Messaging.Mqtt
 
         public int Port { get; set; } = 1883;
 
-        // Empty/absent -> a unique per-instance id is generated so replicas do not
-        // evict each other's broker session (static ClientId made the app single-instance).
         public string? ClientId { get; set; }
 
         public string? Username { get; set; }
