@@ -2,9 +2,7 @@
 using Doorbell.Application.Features.Doorbell.Commands.ReceiveRing;
 using Doorbell.Application.Features.Doorbell.Commands.OrchestrateDeviceCommands;
 using Doorbell.Application.Features.Doorbell.Commands.AcknowledgeRing;
-using Microsoft.EntityFrameworkCore;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Doorbell.Api.Controllers;
@@ -49,20 +47,16 @@ public sealed class DoorbellController : ControllerBase
                     new OrchestrateDeviceCommandsCommand(result.RingEventId),
                     cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException)
             {
-                // A concurrent delivery recorded the same intent first.
             }
         }
 
         return Ok(new { ringEventId = result.RingEventId });
     }
 
-    [Authorize]
     [HttpPost("rings/{ringEventId:guid}/acknowledge")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AcknowledgeRing(
         Guid ringEventId,
